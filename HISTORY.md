@@ -6,6 +6,42 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-08 (69) — Fix: Paths Tree/Graph silently showed nothing for an unknown HTTP status
+
+**Done (user: "at Paths function at Tree can you tell each what
+enpoints can reach such as api/v3/.. (200), (403) if not know just
+tell user anything" — status chips like `200 open`/`403 needs auth`
+already existed per path, but only for paths whose status was actually
+known):**
+
+- `frontend/src/components/DirectoryTree.tsx`'s `StatusChip` had `if
+  (status === null) return null` — a path discovered by a method that
+  carries no real HTTP status (a katana-crawled link, a naabu-style
+  bare `host:port` line) got no chip at all, indistinguishable from a
+  path that was never actually reached. Now renders a gray "status
+  unknown" chip instead of nothing — this component backs *both* the
+  per-item Tree view and the engagement-wide Paths dialog's own Tree
+  view (`PathsDialog.tsx` reuses it directly), so the fix covers both
+  at once.
+- `frontend/src/components/PathGraph.tsx` had the same gap one level
+  worse: `null`-status nodes were filtered out of the tooltip list
+  entirely (`.filter((n) => n.node.status !== null)`), so hovering one
+  showed nothing at all — worth noting, had a node *not* been filtered
+  the tooltip would have literally read "HTTP null". Now every reached
+  node gets a tooltip, "HTTP status unknown" for a `null` status.
+
+**Verified:**
+- `tsc --noEmit`, `eslint`, `next build` all clean.
+- Rebuilt (`docker compose build frontend`) and recreated the live
+  frontend container.
+- Live browser check against the real HTB Cap engagement's Paths
+  dialog: real katana-discovered endpoints with no status (`capture`,
+  `ip`, `netstat`, `2.1.0-dev`) now show a "status unknown" chip in
+  Tree view; switched to Graph view and hovered the same `capture`
+  node — tooltip correctly reads "HTTP status unknown".
+
+---
+
 ## 2026-09-08 (68) — feat: collapsible long text (project scope notes, checklist item descriptions, note content)
 
 **Done (user: "add collapse description at project and checklists

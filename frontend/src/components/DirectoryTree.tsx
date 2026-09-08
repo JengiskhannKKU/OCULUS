@@ -18,12 +18,18 @@ import type { TreeNode } from "@/lib/pathTree";
 // 401/403 mean the path exists but needs credentials/permission; 200 means
 // it's reached and served with no auth at all — the two things a tester
 // actually needs to tell apart at a glance in this tree, not just "found".
+// A `null` status (e.g. a katana-crawled link, or a naabu-style bare
+// host:port line — neither carries a real HTTP status) still gets its own
+// chip rather than silently showing nothing: an endpoint that's genuinely
+// unreached is invisible from a genuinely-reached-but-unknown-status one
+// otherwise, and a tester can't tell "nothing to see here" apart from
+// "this app doesn't actually know" without asking.
 function StatusChip({ status }: { status: number | null }) {
-  if (status === null) return null;
   const isOpen = status === 200;
   const isAuthWalled = status === 401 || status === 403;
-  const color = isOpen ? "#22c55e" : isAuthWalled ? "#f59e0b" : "#64748b";
-  const label = isOpen ? "200 open" : isAuthWalled ? `${status} needs auth` : String(status);
+  const color = status === null ? "#475569" : isOpen ? "#22c55e" : isAuthWalled ? "#f59e0b" : "#64748b";
+  const label =
+    status === null ? "status unknown" : isOpen ? "200 open" : isAuthWalled ? `${status} needs auth` : String(status);
   return (
     <Chip
       label={label}

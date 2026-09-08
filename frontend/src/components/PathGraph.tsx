@@ -144,12 +144,19 @@ export function PathGraph({
         })}
       </svg>
       {/* Real DOM tooltips (SVG <title> only shows on native hover-delay) for
-          nodes that carry a status, since that's the detail worth surfacing
-          fastest — the color already distinguishes open/auth-walled/other. */}
+          every reached node, not just ones with a known status — a node
+          whose status is null (a katana-crawled link, a naabu-style bare
+          host:port line — neither carries a real HTTP status) still gets
+          its own tooltip saying so, rather than hovering it giving no
+          information at all, indistinguishable from an unreached node. */}
       {nodes
-        .filter((n) => n.node.observed && n.node.status !== null)
+        .filter((n) => n.node.observed)
         .map((n) => (
-          <Tooltip key={`tip-${n.node.path}`} title={`HTTP ${n.node.status}`} placement="top">
+          <Tooltip
+            key={`tip-${n.node.path}`}
+            title={n.node.status === null ? "HTTP status unknown" : `HTTP ${n.node.status}`}
+            placement="top"
+          >
             <Box
               sx={{
                 position: "absolute",
