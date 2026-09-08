@@ -6,6 +6,43 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-08 (65) — Fix: nikto against any https:// target — "TLS/SSL support not available"
+
+**Done (user pasted a real error running `nikto -h
+https://banking.snoopbees.com -Tuning 1234567890 -nointeractive
+-Display 1`: "Use of uninitialized value $LW2::_SSL_LIBRARY... TLS/SSL
+support not available... ERROR: -ssl was specified but TLS/SSL is not
+available"):**
+- Root cause, confirmed directly: nikto's own TLS support depends on
+  two *optional* Perl modules it only `use`s conditionally —
+  `Net::SSLeay` and `IO::Socket::SSL` — neither was installed at all.
+  `perl -MNet::SSLeay -e ...` / `-MIO::Socket::SSL` both failed with
+  "Can't locate ... in @INC" inside the live container. The Dockerfile
+  installs `libjson-perl`/`libxml-writer-perl` for nikto's report/
+  plugin modules but never pulled in the SSL ones — since nikto degrades
+  to this runtime error instead of failing at its own git-clone/link
+  install step, this had been silently broken for every HTTPS target
+  since nikto was first added (no WSTG/OSCP item happened to hit it
+  with a real `https://` target and a login until now).
+- `Dockerfile`: added `libnet-ssleay-perl` and `libio-socket-ssl-perl`
+  to the main apt install (the Debian packages that provide these two
+  Perl modules) — plain apt packages, no interactive/debconf concerns
+  like tshark's `wireshark-common` (entry 59).
+
+**Verified:**
+- Rebuilt (`docker compose build backend`) and recreated (`docker
+  compose up -d backend`) the live backend container.
+- `perl -MNet::SSLeay -e 'print "OK"'` / `-MIO::Socket::SSL` both
+  resolve cleanly now (previously "Can't locate").
+- Ran the user's *exact* reported command for real, against the exact
+  target that failed: `nikto -h https://banking.snoopbees.com -Tuning
+  1234567890 -nointeractive -Display 1` — now connects over TLS,
+  prints the real SSL cert subject/SAN/issuer/cipher, and returns real
+  findings (missing security headers, an outdated nginx version, a
+  wildcard-certificate note) instead of erroring out immediately.
+
+---
+
 ## 2026-09-08 (64) — Fix: re-running a tool against a different path wiped out the previous run's discovered paths
 
 **Done (user: "ของ oscp style ตอนผม run พวกหา enpoints มีปัญหา พอเลือก

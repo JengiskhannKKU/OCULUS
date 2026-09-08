@@ -32,6 +32,15 @@ LABEL org.opencontainers.image.title="oculus" \
 # runtime/build deps for the Ruby (wpscan), Perl (nikto), and shell
 # (testssl.sh) tools:
 #   - libjson-perl / libxml-writer-perl: nikto's report/plugin modules
+#   - libnet-ssleay-perl / libio-socket-ssl-perl: nikto's own TLS support —
+#     confirmed via a real run against an https:// target that without
+#     these, nikto doesn't just skip SSL, it hard-errors ("TLS/SSL support
+#     not available... -ssl was specified but TLS/SSL is not available"),
+#     refusing to scan any HTTPS target at all. Not pulled in by the
+#     `perl`/nikto packages above on their own — Net::SSLeay and
+#     IO::Socket::SSL are separate optional Perl modules nikto only
+#     `use`s conditionally, so their absence fails silent-until-runtime
+#     rather than at nikto's own git clone/link step below.
 #   - bsdextrautils / procps: `hexdump` and `ps`, both used by testssl.sh
 #   - libcurl4: required at runtime by the `ffi`/`typhoeus` gems wpscan depends on
 #   - sqlmap / hydra: both packaged directly for Debian, no build step needed
@@ -76,6 +85,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteract
         perl \
         libjson-perl \
         libxml-writer-perl \
+        libnet-ssleay-perl \
+        libio-socket-ssl-perl \
         bsdextrautils \
         procps \
         ruby-full \
