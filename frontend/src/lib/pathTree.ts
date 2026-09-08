@@ -31,6 +31,16 @@ const GOBUSTER_RE = /^(\/\S*)\s+\(Status:\s*(\d+)/;
 const NIKTO_RE = /^\+\s*(?:OSVDB-\d+:\s*)?(\/[^\s:]+):/;
 // katana / ffuf verbose: a bare absolute URL alone on its own line.
 const BARE_URL_RE = /^(https?:\/\/\S+)$/;
+// OWASP ZAP's baseline scan (zap-baseline.py — see oculus/tools/
+// zap_tool.py): each WARN-NEW/FAIL-NEW alert block lists the affected
+// URLs indented underneath it, one per line, as "<url> (<status> <reason
+// phrase>)" — e.g. "https://target/admin (200 OK)". Real, current status
+// data that was previously invisible to this whole tree: it doesn't match
+// BARE_URL_RE above (there's always a trailing " (...)"), so a real zap
+// run's own confirmed 200s never showed up here at all. Gated to zap
+// specifically, like the nikto/ffuf fallbacks below — a bare "<url>
+// (...)" shape is too generic to assume for every other tool's output.
+const ZAP_URL_RE = /^(https?:\/\/\S+)\s+\((\d{3})\b/;
 // Real ffuf with -s (silent) prints just the matched value, bare, one per
 // line ("admin", "api", "login") — no scheme/host/status decoration at all.
 // Only still seen on runs saved before -v replaced -s; carries no status.
@@ -82,6 +92,14 @@ export function parseDiscoveredPaths(
       m = line.match(NIKTO_RE);
       if (m) {
         paths.set(m[1], null);
+        continue;
+      }
+    }
+
+    if (toolName === "zap") {
+      m = line.match(ZAP_URL_RE);
+      if (m) {
+        paths.set(stripUrlToPath(m[1]), Number(m[2]));
         continue;
       }
     }

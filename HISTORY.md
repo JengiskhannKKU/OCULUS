@@ -6,6 +6,54 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-08 (70) — Fix: zap's own confirmed 200s never reached the Paths tree
+
+**Done (user: "when run zap then it 200 but it not update and any
+tools can you fix it" — ZAP's own scan confirms real HTTP statuses for
+the URLs it touches, but that never showed up in the Paths tree):**
+
+- Root cause: `frontend/src/lib/pathTree.ts`'s `parseDiscoveredPaths()`
+  only ever recognized ffuf/gobuster/nikto's output shapes plus one
+  generic fallback (a bare `https://...` URL alone on its own line,
+  nothing else). ZAP's real baseline-scan output (`zap-baseline.py`)
+  lists each alert's affected URLs as `\t<url> (<status> <reason>)` —
+  e.g. `\thttp://10.129.34.27/ip (200 OK)` — which never matched that
+  generic fallback (there's always trailing `" (...)"` text after the
+  URL), so zap's own findings were structurally invisible to the whole
+  Paths tree/count/status-filter chips, not merely "not updating."
+  `oculus/tools/zap_tool.py`'s own `mock_output()` docstring already
+  says this shape is "confirmed via a live run" — the gap had been
+  sitting there since zap was first wrapped, just never hit until a
+  real Paths dialog was compared against a real zap run.
+- Added a zap-specific regex (`ZAP_URL_RE`), gated to `toolName ===
+  "zap"` like the existing nikto/ffuf-bare-path fallbacks, so a
+  generic `<url> (...)` shape from some *other* tool's output doesn't
+  get misread as a path.
+- Audited every other wrapped tool's real/mock output for the same
+  class of gap (a URL+HTTP-status pair the Paths tree should recognize
+  but doesn't) — nothing else found; testssl.sh's own `(OK)` lines are
+  TLS protocol-test results, not URLs, and were correctly already out
+  of scope.
+
+**Verified:**
+- Tested the new regex directly against `ZapTool.mock_output()`'s own
+  text (confirmed itself to match zap-baseline.py's real format) —
+  correctly extracted `https://target`, `/login`, `/admin`, all `200`.
+- `tsc --noEmit`, `eslint`, `next build` clean.
+- Rebuilt (`docker compose build frontend`) and recreated the live
+  frontend container.
+- Confirmed against **real, already-stored zap output** from 7
+  different real engagements on disk (one of them the user's own real
+  `ff15c930` HTB Cap run) — not just the mock. Opened the live Paths
+  dialog: count went from 28 to 31; `/ip` and `/netstat` (previously
+  showing only entry 69's new "status unknown" chip, from katana) now
+  correctly show a real "200 open" chip confirmed by zap; zap also
+  surfaced two paths nothing else had found at all (`/robots.txt`,
+  `/sitemap.xml`, both real `404`s); the status-filter chips at the
+  top of the dialog now read "200 × 8" / "404 × 3" across all sources.
+
+---
+
 ## 2026-09-08 (69) — Fix: Paths Tree/Graph silently showed nothing for an unknown HTTP status
 
 **Done (user: "at Paths function at Tree can you tell each what
