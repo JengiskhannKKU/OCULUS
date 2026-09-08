@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from oculus import state
+from oculus import project_store, state
 from oculus.checklist import build_checklist, build_oscp_checklist
 from oculus.models import Engagement
 
@@ -27,11 +29,17 @@ class NewEngagement(BaseModel):
     notes: str = ""
     icon: str = "web"
     methodology: str = "wstg"
+    # Parent Project this host belongs to — omitted/None creates a
+    # standalone engagement, exactly today's behavior.
+    project_id: Optional[str] = None
 
 
 @router.get("")
-def list_engagements() -> list[dict]:
-    return state.list_all()
+def list_engagements(project_id: Optional[str] = None) -> list[dict]:
+    engagements = state.list_all()
+    if project_id is not None:
+        engagements = [e for e in engagements if e.get("project_id") == project_id]
+    return engagements
 
 
 @router.post("")
@@ -44,6 +52,7 @@ def create_engagement(body: NewEngagement) -> Engagement:
         icon=body.icon or "web",
         methodology=methodology,
         scope_notes=body.notes,
+        project_id=body.project_id,
         checklist_items=build(),
     )
     state.save(engagement)
@@ -51,8 +60,22 @@ def create_engagement(body: NewEngagement) -> Engagement:
 
 
 @router.get("/{eng_id}")
-def get_engagement(eng_id: str) -> Engagement:
-    return load_engagement(eng_id)
+def get_engagement(eng_id: str) -> dict:
+    engagement = load_engagement(eng_id)
+    payload = engagement.model_dump(mode="json")
+    # Embed the parent project's name directly so the frontend's
+    # breadcrumb on the engagement detail page doesn't need a second
+    # fetch — None for a standalone engagement, or if the project was
+    # since deleted (cascade-delete already removes its hosts too, so
+    # this only matters for the brief window between the two, but stay
+    # honest either way rather than 500ing on a stale project_id).
+    payload["project_name"] = None
+    if engagement.project_id:
+        try:
+            payload["project_name"] = project_store.load(engagement.project_id).name
+        except FileNotFoundError:
+            pass
+    return payload
 
 
 @router.delete("/{eng_id}")

@@ -27,6 +27,7 @@ import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/Badge";
 import { FindingsPanel } from "@/components/FindingsPanel";
 import { EvidencePanel } from "@/components/EvidencePanel";
+import { NotesPanel } from "@/components/NotesPanel";
 import { RunToolDialog } from "@/components/RunToolDialog";
 import { ChecklistItemDialog } from "@/components/ChecklistItemDialog";
 import { HighlightedOutput } from "@/components/HighlightedOutput";
@@ -83,8 +84,6 @@ export function ItemDetail({
   const [showRun, setShowRun] = useState(false);
   const [showToolsHelp, setShowToolsHelp] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [notes, setNotes] = useState(item.notes);
-  const [savingNotes, setSavingNotes] = useState(false);
   // The tester's own tab pick — kept separate from the *effective* active
   // tab below because this only updates on an explicit action (clicking a
   // tab, or a run finishing), not every time `item` changes. Without that
@@ -271,20 +270,6 @@ export function ItemDetail({
   function runToolAt(path: string) {
     setRunAtPath(path);
     setShowRun(true);
-  }
-
-  async function saveNotes() {
-    if (notes === item.notes) return;
-    setSavingNotes(true);
-    try {
-      const updated = await api.updateNotes(engagementId, item.id, notes);
-      onChange(updated);
-      toast.success("Notes saved");
-    } catch {
-      toast.error("Failed to save notes");
-    } finally {
-      setSavingNotes(false);
-    }
   }
 
   async function act(action: "markDone" | "skip" | "reset") {
@@ -559,35 +544,7 @@ export function ItemDetail({
           </Box>
 
           <Box mb={2}>
-            <Typography variant="subtitle2" fontWeight={700} mb={1}>
-              Notes
-            </Typography>
-            <Box
-              component="textarea"
-              value={notes}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
-              onBlur={saveNotes}
-              rows={3}
-              placeholder="Tester notes…"
-              sx={{
-                width: "100%",
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                bgcolor: "rgba(255,255,255,0.02)",
-                color: "text.primary",
-                fontFamily: "inherit",
-                fontSize: 14,
-                p: 1.25,
-                resize: "vertical",
-                "&:focus": { outline: "none", borderColor: "primary.main" },
-              }}
-            />
-            {savingNotes && (
-              <Typography variant="caption" color="text.secondary">
-                Saving…
-              </Typography>
-            )}
+            <NotesPanel engagementId={engagementId} item={item} onChange={onChange} />
           </Box>
         </motion.div>
       </Box>

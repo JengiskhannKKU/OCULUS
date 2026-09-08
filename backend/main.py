@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import config, engagements, evidence, findings, items, paths, ports, reports, tools
+from .routers import config, engagements, evidence, findings, items, notes, paths, ports, projects, reports, tools
 from .ws import router as ws_router
 
 app = FastAPI(title="oculus web", version="0.1.0")
@@ -26,11 +26,13 @@ app.add_middleware(
 
 app.include_router(config.router)
 app.include_router(engagements.router)
+app.include_router(projects.router)
 app.include_router(items.router)
 app.include_router(evidence.router)
 app.include_router(paths.router)
 app.include_router(ports.router)
 app.include_router(findings.router)
+app.include_router(notes.router)
 app.include_router(tools.router)
 app.include_router(reports.router)
 app.include_router(ws_router)

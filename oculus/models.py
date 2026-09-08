@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +97,24 @@ class Evidence(BaseModel):
     uploaded_at: datetime = Field(default_factory=datetime.now)
 
 
+class NoteKind(str, Enum):
+    TEXT = "text"    # a plain paragraph
+    LIST = "list"    # content is newline-separated; each line renders as one bullet
+    CODE = "code"    # content renders in a monospace block, whitespace preserved
+
+
+class Note(BaseModel):
+    """One tester-written note on a checklist item. Items hold a *list* of
+    these (not one big free-text blob) so a tester can keep, say, a running
+    bullet list of things to check alongside a separate code/command
+    snippet, each editable/deletable on its own — same "small, addable,
+    deletable entries" shape as Finding/Evidence on this same item."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    kind: NoteKind = NoteKind.TEXT
+    content: str = ""
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
 class ChecklistItem(BaseModel):
     id: str                          # e.g. "WSTG-INFO-02"
     name: str
@@ -113,8 +131,21 @@ class ChecklistItem(BaseModel):
     time_elapsed_seconds: Optional[float] = None
     owasp_ref: str = ""
     cwe_ids: list[str] = []
-    notes: str = ""
+    notes: list[Note] = []
     evidence: list[Evidence] = []
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def _migrate_legacy_notes(cls, v):
+        """`notes` used to be a single free-text string (one big textarea).
+        Every checklist item saved before this changed still has that
+        shape on disk — wrap a non-empty legacy string into one TEXT note
+        so existing tester notes survive the upgrade instead of silently
+        vanishing; an empty legacy string becomes an empty list, same as
+        never having written a note at all."""
+        if isinstance(v, str):
+            return [{"kind": "text", "content": v}] if v.strip() else []
+        return v
 
 
 class ManualPathEntry(BaseModel):
@@ -140,10 +171,30 @@ class ManualPortEntry(BaseModel):
     added_at: datetime = Field(default_factory=datetime.now)
 
 
+class Project(BaseModel):
+    """A named grouping of Engagements ("hosts") for one assessment —
+    e.g. every host under a single client engagement or CTF range.
+    Purely an optional organizational layer: a Project has no target,
+    methodology, or checklist of its own — those all still live on each
+    Engagement underneath it via Engagement.project_id, unchanged from
+    how a standalone (ungrouped) Engagement has always worked. See
+    oculus/project_store.py for persistence.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    name: str
+    scope_notes: str = ""
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+
 class Engagement(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     name: str
     target: str
+    # Parent Project this host belongs to, if any — None for a
+    # standalone engagement (every engagement created before this field
+    # existed loads with this defaulting to None, no migration needed).
+    project_id: Optional[str] = None
     # Key into frontend/src/lib/engagementIcons.tsx's fixed icon set — a
     # free-text field would need sanitizing wherever it's rendered, and a
     # curated set (web/api/mobile/cloud/...) covers what a pentest target

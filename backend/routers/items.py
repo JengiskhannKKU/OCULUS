@@ -15,10 +15,6 @@ from ..deps import get_item, load_engagement
 router = APIRouter(prefix="/api/engagements/{eng_id}/items", tags=["items"])
 
 
-class NotesUpdate(BaseModel):
-    notes: str
-
-
 class NewChecklistItem(BaseModel):
     name: str
     description: str = ""
@@ -139,14 +135,5 @@ def reset(eng_id: str, item_id: str) -> ChecklistItem:
     engagement = load_engagement(eng_id)
     item = get_item(engagement, item_id)
     Orchestrator(engagement).reset(item)
-    state.save(engagement)
-    return item
-
-
-@router.patch("/{item_id}/notes")
-def update_notes(eng_id: str, item_id: str, body: NotesUpdate) -> ChecklistItem:
-    engagement = load_engagement(eng_id)
-    item = get_item(engagement, item_id)
-    item.notes = body.notes
     state.save(engagement)
     return item

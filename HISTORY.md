@@ -6,6 +6,152 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-08 (67) — feat: structured, multi-entry Notes (Text/List/Code) per checklist item
+
+**Done (user, after confirming per-item Notes already existed as a
+single free-text box: "ตรง note ช่วยทำเป็นสามารถเขียนเป็นข้อๆ และเพิ่ม
+note ได้หลายแบบเช่น code note หรือได้หลายๆแนว" — wants to write notes
+as bullet points, and be able to add multiple notes of different kinds,
+e.g. a code note, in various styles):**
+
+- `oculus/models.py`: new `Note` model (`id`, `kind` — `text`/`list`/
+  `code` — `content`, `created_at`) and `ChecklistItem.notes` changed
+  from a single `str` to `list[Note]` — same "small, addable/editable/
+  deletable entries" shape `findings`/`evidence` already use on this
+  same item, instead of one big textarea.
+- **Backward compatibility for the type change** (not just a new
+  optional field this time — an actual shape change on an existing
+  field): added a `field_validator(mode="before")` on `notes` that
+  wraps a non-empty legacy string into one `TEXT` note, and an empty
+  legacy string into `[]`. Confirmed directly against real data: HTB
+  Cap's own `OSCP-EXPLOIT-01` item had a real legacy note ("Credential
+  nathan / Buck3tH4TF0RM3!" — the credential recovered in entry 60) —
+  it survived the upgrade as a proper `TEXT` note, not lost.
+- `backend/routers/notes.py` (new): `POST`/`PATCH .../{note_id}`/
+  `DELETE .../{note_id}`, same CRUD shape as `findings.py`. Removed the
+  old single `PATCH /{item_id}/notes` endpoint from `items.py` (same
+  URL path as the new router's base path — kept both would have
+  collided).
+- Frontend: `frontend/src/components/NotesPanel.tsx` (new) replaces
+  the old plain `<textarea>` in `ItemDetail.tsx` — a "+ Add note"
+  button opens a small form (Type: Text/List/Code + content), each
+  saved note renders as its own card with Edit/Delete, `kind`
+  determines rendering: `list` splits on newlines into real `<li>`
+  bullets, `code` renders in a monospace block (same whitespace-safe
+  `pre-wrap` fix from entry 61, so a long unbroken code line wraps
+  instead of running off the card), `text` is a plain paragraph.
+
+**Verified:**
+- Migration tested directly against three different real, already-
+  saved engagements with non-empty legacy notes (`9686d51c`,
+  `34c482a9`, `ff15c930`) — every one correctly became a single `TEXT`
+  note with its original content intact, not dropped.
+- `tsc --noEmit`, `eslint`, `next build` clean.
+- Rebuilt (`docker compose build backend frontend` — one transient
+  Google Fonts network blip on the first attempt, unrelated to this
+  change, succeeded clean on retry) and recreated both live containers.
+- Confirmed the real legacy credential note still present via a live
+  `GET /api/engagements/ff15c930` call post-rebuild.
+- Full live browser walkthrough on that same real item: existing
+  legacy note renders correctly as a "Text" card; added a real "List"
+  note (3 lines) via the UI, saved, confirmed it rendered as actual
+  bullet points and "Notes (2)"; deleted the test note, confirmed back
+  to "Notes (1)" with the original credential note untouched.
+
+---
+
+## 2026-09-08 (66) — feat: Projects — group multiple hosts under one assessment
+
+**Done (user: "can you implement the engagements for main and sub main
+that main projects can add each host then select checklists in main
+project instead only one engagement per ip address" — this session's
+own live-testing had produced real sprawl: 14 engagements, several
+duplicates of the same logical assessment, because there was no way to
+group related hosts (e.g. `banking.snoopbees.com` +
+`ekyc.snoopbees.com`, part of the same Nethergate Ryall assessment)
+under one umbrella):**
+
+Planned first (`EnterPlanMode`, user approved) given the size — this
+touches the data model and most of the frontend. Landed on a
+deliberately **additive, non-destructive** design: nothing about
+today's Engagement model, routers, checklist logic, tool execution,
+findings, evidence, or Paths/Ports summaries changed at all.
+
+- **New `Project` model** (`oculus/models.py`): just `id`, `name`,
+  `scope_notes`, timestamps — no target/methodology/checklist of its
+  own. Persisted via a new `oculus/project_store.py`, mirroring
+  `oculus/state.py`'s exact flat-JSON pattern (`~/.oculus/projects/`).
+- **`Engagement` gains one new optional field**: `project_id: str |
+  None = None`. Every one of the 14 pre-existing engagements loads
+  fine with it defaulting to `None` — confirmed directly, zero
+  migration needed, zero data at risk.
+- **New `backend/routers/projects.py`**: list (with a host-count +
+  findings/critical/high roll-up per project), create, get (project +
+  its hosts), delete (cascades to every host under it — the frontend
+  confirm dialog states the exact host count before this is ever
+  called, same "permanently delete, cannot be undone" posture the
+  single-engagement delete already used).
+- `backend/routers/engagements.py`: `NewEngagement` gained
+  `project_id`; `POST /api/engagements` passes it straight through
+  (one line — "select checklist in main project" already happens here,
+  per host, exactly like today's New Engagement form always worked);
+  `GET /api/engagements` gained an optional `?project_id=` filter;
+  `GET /api/engagements/{id}` now embeds the parent project's name so
+  the detail page's breadcrumb needs no second fetch.
+- Frontend: extracted `EngagementCard` and the Target/Name/Notes/Icon/
+  Methodology form (now `NewHostDialog`, taking an optional
+  `projectId`) out of `engagements/page.tsx` into
+  `frontend/src/components/` so both the existing flat list and the
+  new project pages share them without duplication. New `/projects`
+  (list + create) and `/projects/[id]` (host grid + "Add host") pages.
+  `engagements/[id]/page.tsx`'s breadcrumb now reads "← {project name}"
+  linking to `/projects/{id}` when a host has a parent project, "← All
+  engagements" otherwise (unchanged). `NavBar`'s DASHBOARD button and
+  the landing page's "Open Dashboard" now point at `/projects` as the
+  new primary entry point; `/engagements` still lists everything
+  exactly as before (now with a "Grouped by project? →" link) and
+  remains the home for ungrouped/standalone hosts.
+- **Out of scope, flagged not dropped**: the CLI/TUI
+  (`oculus/cli.py`/`oculus/tui.py`) stay engagement-only — project
+  support there would roughly double this task and neither has been
+  touched all session. Report export stays per-host.
+
+**Verified:**
+- Backward compatibility: loaded a real pre-existing engagement
+  (`ff15c930`, HTB Cap) directly — `project_id` correctly defaults to
+  `None`, no error.
+- Full API smoke test against the live rebuilt backend: created a
+  project, added two hosts under it with different methodologies (one
+  `wstg`, one `oscp`) — confirmed distinct checklist sizes (97 vs 34
+  items), `GET` the project back returns both, `DELETE` the project
+  cascaded correctly (both hosts independently confirmed `404`
+  afterward).
+- `tsc --noEmit`, `eslint`, `next build` all clean (one real bug caught
+  and fixed along the way: `engagements/page.tsx` lost its `Stack`
+  import during the extraction — caught by `tsc`, not shipped).
+- Rebuilt (`docker compose build backend frontend`) and recreated both
+  live containers.
+- Full live browser walkthrough: `/projects` → created a real project
+  → added two real hosts (`banking.snoopbees.com` OSCP-style,
+  `ekyc.snoopbees.com` WSTG) → both cards rendered with correct
+  methodology chips and checklist sizes → opened one host, confirmed
+  the checklist page works exactly as before and the breadcrumb links
+  back to the project → confirmed `/engagements` still lists all 16
+  hosts (14 original + 2 new) with correct totals. Cleaned up the test
+  project afterward (cascade-delete confirmed all its data gone, the
+  14 original engagements untouched).
+
+**Next steps for the next agent:**
+1. CLI/TUI project support (see "out of scope" above) is a real,
+   deliberately-deferred gap, not an oversight.
+2. A whole-project Markdown/Word report export (aggregating every
+   host's findings into one document) is a natural follow-up — report
+   export is still per-host only.
+3. No project-level edit (rename/change notes) UI yet — only
+   create/delete. Would be a small addition to `/projects/[id]`.
+
+---
+
 ## 2026-09-08 (65) — Fix: nikto against any https:// target — "TLS/SSL support not available"
 
 **Done (user pasted a real error running `nikto -h

@@ -334,11 +334,11 @@ export default function EngagementPage({
           <Box>
             <Typography
               component={Link}
-              href="/engagements"
+              href={engagement.project_id ? `/projects/${engagement.project_id}` : "/engagements"}
               variant="caption"
               sx={{ color: "text.secondary", textDecoration: "none", "&:hover": { color: "text.primary" } }}
             >
-              ← All engagements
+              ← {engagement.project_id ? (engagement.project_name ?? "Project") : "All engagements"}
             </Typography>
             <Typography variant="h6" fontWeight={700}>
               {engagement.name}

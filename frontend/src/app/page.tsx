@@ -163,7 +163,7 @@ export default function LandingPage() {
           <FadeIn delay={0.38}>
             <Button
               component={Link}
-              href="/engagements"
+              href="/projects"
               variant="outlined"
               color="primary"
               size="large"

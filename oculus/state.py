@@ -56,6 +56,7 @@ def list_all() -> list[dict]:
                 "target":     eng.target,
                 "icon":       eng.icon,
                 "methodology": eng.methodology,
+                "project_id": eng.project_id,
                 "created_at": eng.created_at.strftime("%Y-%m-%d %H:%M"),
                 "progress":   f"{eng.done_items}/{eng.total_items}",
                 "findings":   eng.total_findings,

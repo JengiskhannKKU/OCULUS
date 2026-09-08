@@ -54,7 +54,7 @@ export function NavBar() {
         <Box flex={1} />
         <Button
           component={Link}
-          href="/engagements"
+          href="/projects"
           size="small"
           sx={{ fontSize: 12.5, letterSpacing: 1 }}
         >

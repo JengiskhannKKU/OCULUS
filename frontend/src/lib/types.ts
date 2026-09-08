@@ -30,6 +30,15 @@ export interface EvidenceFile {
   uploaded_at: string;
 }
 
+export type NoteKind = "text" | "list" | "code";
+
+export interface Note {
+  id: string;
+  kind: NoteKind;
+  content: string;
+  created_at: string;
+}
+
 export interface ChecklistItem {
   id: string;
   name: string;
@@ -46,7 +55,7 @@ export interface ChecklistItem {
   time_elapsed_seconds: number | null;
   owasp_ref: string;
   cwe_ids: string[];
-  notes: string;
+  notes: Note[];
   evidence: EvidenceFile[];
 }
 
@@ -79,6 +88,12 @@ export interface Engagement {
   removed_paths: string[];
   manual_ports: ManualPortEntry[];
   removed_ports: string[];
+  // Parent Project this host belongs to, if any — null for a standalone
+  // engagement (every engagement created before Projects existed).
+  // project_name is embedded server-side (GET /api/engagements/{id})
+  // purely so the detail page's breadcrumb needs no second fetch.
+  project_id: string | null;
+  project_name: string | null;
 }
 
 export interface EngagementSummary {
@@ -93,6 +108,27 @@ export interface EngagementSummary {
   critical: number;
   high: number;
   medium: number;
+  project_id: string | null;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  scope_notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  scope_notes: string;
+  created_at: string;
+  updated_at: string;
+  host_count: number;
+  findings: number;
+  critical: number;
+  high: number;
 }
 
 export interface ToolInfo {

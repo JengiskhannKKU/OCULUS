@@ -6,34 +6,24 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
+import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Paper from "@mui/material/Paper";
-import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
-import Stack from "@mui/material/Stack";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import InputAdornment from "@mui/material/InputAdornment";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast";
-import { ProgressBar } from "@/components/SeverityBar";
-import { ENGAGEMENT_ICONS, DEFAULT_ENGAGEMENT_ICON, engagementIcon } from "@/lib/engagementIcons";
-import { METHODOLOGIES, DEFAULT_METHODOLOGY, methodologyLabel } from "@/lib/methodologies";
+import { EngagementCard } from "@/components/EngagementCard";
+import { NewHostDialog } from "@/components/NewHostDialog";
 import type { EngagementSummary } from "@/lib/types";
 
 function StatCard({ label, value, color, delay }: { label: string; value: string | number; color?: string; delay: number }) {
@@ -56,257 +46,6 @@ function StatCard({ label, value, color, delay }: { label: string; value: string
   );
 }
 
-function IconPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (key: string) => void;
-}) {
-  return (
-    <FormControl fullWidth>
-      <InputLabel id="engagement-icon-label">Icon</InputLabel>
-      <Select
-        labelId="engagement-icon-label"
-        label="Icon"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        renderValue={(val) => {
-          const meta = engagementIcon(val);
-          const { Icon } = meta;
-          return (
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Icon fontSize="small" sx={{ color: meta.color }} />
-              <span>{meta.label}</span>
-            </Stack>
-          );
-        }}
-      >
-        {Object.entries(ENGAGEMENT_ICONS).map(([key, meta]) => {
-          const { Icon } = meta;
-          return (
-            <MenuItem key={key} value={key}>
-              <ListItemIcon>
-                <Icon fontSize="small" sx={{ color: meta.color }} />
-              </ListItemIcon>
-              <ListItemText>{meta.label}</ListItemText>
-            </MenuItem>
-          );
-        })}
-      </Select>
-    </FormControl>
-  );
-}
-
-function MethodologyPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (key: string) => void;
-}) {
-  return (
-    <Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-        Testing strategy / methodology
-      </Typography>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-        {Object.entries(METHODOLOGIES).map(([key, meta]) => {
-          const selected = key === value;
-          const { Icon } = meta;
-          return (
-            <Paper
-              key={key}
-              component="button"
-              type="button"
-              onClick={() => onChange(key)}
-              elevation={0}
-              sx={{
-                flex: 1,
-                textAlign: "left",
-                cursor: "pointer",
-                p: 1.5,
-                display: "flex",
-                flexDirection: "column",
-                gap: 0.75,
-                fontFamily: "inherit",
-                border: "1px solid",
-                borderColor: selected ? meta.color : "divider",
-                bgcolor: selected ? `${meta.color}14` : "background.paper",
-                boxShadow: selected
-                  ? `0 0 0 1px ${meta.color}59, 0 0 14px ${meta.color}2e`
-                  : "none",
-                transition: "border-color 0.15s, box-shadow 0.15s, background-color 0.15s",
-                "&:hover": { borderColor: meta.color },
-              }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Box
-                  sx={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 1,
-                    flexShrink: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    bgcolor: `${meta.color}22`,
-                    color: meta.color,
-                  }}
-                >
-                  <Icon fontSize="small" />
-                </Box>
-                <Typography variant="body2" fontWeight={700}>
-                  {meta.label}
-                </Typography>
-              </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.45 }}>
-                {meta.description}
-              </Typography>
-            </Paper>
-          );
-        })}
-      </Stack>
-    </Box>
-  );
-}
-
-function EngagementCard({
-  engagement,
-  onDelete,
-  delay,
-}: {
-  engagement: EngagementSummary;
-  onDelete: () => void;
-  delay: number;
-}) {
-  const [done, total] = engagement.progress.split("/").map(Number);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay }}
-      style={{ height: "100%" }}
-    >
-      <Paper
-        component={Link}
-        href={`/engagements/${engagement.id}`}
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          p: 2.5,
-          textDecoration: "none",
-          color: "inherit",
-          transition: "border-color 0.15s, box-shadow 0.15s, transform 0.15s",
-          "&:hover": {
-            borderColor: "primary.main",
-            boxShadow: "0 0 0 1px rgba(94,234,212,0.35), 0 0 20px rgba(94,234,212,0.13)",
-            transform: "translateY(-2px)",
-          },
-        }}
-      >
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={1.5} spacing={1}>
-          <Stack direction="row" spacing={1.25} alignItems="center" minWidth={0}>
-            {(() => {
-              const { Icon, color, label } = engagementIcon(engagement.icon);
-              return (
-                <Tooltip title={label}>
-                  <Box
-                    sx={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 1,
-                      flexShrink: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      bgcolor: `${color}1a`,
-                      color,
-                    }}
-                  >
-                    <Icon fontSize="small" />
-                  </Box>
-                </Tooltip>
-              );
-            })()}
-            <Box minWidth={0}>
-              <Stack direction="row" alignItems="center" spacing={0.75}>
-                <Typography variant="subtitle1" fontWeight={700} noWrap>
-                  {engagement.name}
-                </Typography>
-                <Chip
-                  label={methodologyLabel(engagement.methodology)}
-                  size="small"
-                  variant="outlined"
-                  sx={{ height: 18, fontSize: 10, flexShrink: 0 }}
-                />
-              </Stack>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ fontFamily: "var(--font-geist-mono)" }}
-              >
-                {engagement.id}
-              </Typography>
-            </Box>
-          </Stack>
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelete();
-            }}
-            sx={{ color: "text.secondary", flexShrink: 0, "&:hover": { color: "#ef4444" } }}
-          >
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          noWrap
-          mb={2}
-          sx={{ fontFamily: "var(--font-geist-mono)" }}
-        >
-          {engagement.target}
-        </Typography>
-
-        <Box mb={2} mt="auto">
-          <ProgressBar done={done || 0} total={total || 0} />
-        </Box>
-
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
-            <Typography variant="body2">
-              {engagement.findings} finding{engagement.findings === 1 ? "" : "s"}
-            </Typography>
-            {engagement.critical > 0 && (
-              <Chip
-                size="small"
-                label={`${engagement.critical} crit`}
-                sx={{ bgcolor: "#dc2626", color: "#fff", height: 20, fontSize: 11 }}
-              />
-            )}
-            {engagement.high > 0 && (
-              <Chip
-                size="small"
-                label={`${engagement.high} high`}
-                sx={{ bgcolor: "#f97316", color: "#fff", height: 20, fontSize: 11 }}
-              />
-            )}
-          </Stack>
-          <Typography variant="caption" color="text.disabled" flexShrink={0}>
-            {engagement.created_at}
-          </Typography>
-        </Stack>
-      </Paper>
-    </motion.div>
-  );
-}
-
 export default function EngagementsPage() {
   const router = useRouter();
   const toast = useToast();
@@ -314,12 +53,6 @@ export default function EngagementsPage() {
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [query, setQuery] = useState("");
-  const [target, setTarget] = useState("");
-  const [name, setName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [icon, setIcon] = useState(DEFAULT_ENGAGEMENT_ICON);
-  const [methodology, setMethodology] = useState(DEFAULT_METHODOLOGY);
-  const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -337,20 +70,6 @@ export default function EngagementsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
     refresh();
   }, []);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!target.trim()) return;
-    setCreating(true);
-    try {
-      const eng = await api.createEngagement(target.trim(), name.trim(), notes.trim(), icon, methodology);
-      toast.success(`Engagement "${eng.name}" created`);
-      router.push(`/engagements/${eng.id}`);
-    } catch {
-      toast.error("Failed to create engagement.");
-      setCreating(false);
-    }
-  }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -416,6 +135,23 @@ export default function EngagementsPage() {
               Engagements
             </Typography>
           </Stack>
+          <Typography
+            component={Link}
+            href="/projects"
+            variant="caption"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.5,
+              mt: 0.5,
+              color: "text.secondary",
+              textDecoration: "none",
+              "&:hover": { color: "primary.main" },
+            }}
+          >
+            <AccountTreeOutlinedIcon sx={{ fontSize: 14 }} />
+            Grouped by project? See Projects →
+          </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setShowForm(true)}>
           New Engagement
@@ -441,47 +177,14 @@ export default function EngagementsPage() {
         </Stack>
       )}
 
-      <Dialog open={showForm} onClose={() => setShowForm(false)} fullWidth maxWidth="sm">
-        <form onSubmit={handleCreate}>
-          <DialogTitle>New engagement</DialogTitle>
-          <DialogContent>
-            <Stack spacing={2} mt={1}>
-              <TextField
-                required
-                autoFocus
-                fullWidth
-                label="Target"
-                placeholder="example.com"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-              />
-              <TextField
-                fullWidth
-                label="Name"
-                placeholder="defaults to target"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <TextField
-                fullWidth
-                multiline
-                minRows={2}
-                label="Scope notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-              <IconPicker value={icon} onChange={setIcon} />
-              <MethodologyPicker value={methodology} onChange={setMethodology} />
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2.5 }}>
-            <Button onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={creating}>
-              {creating ? "Creating…" : "Create engagement"}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
+      <NewHostDialog
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        onCreated={(eng) => {
+          setShowForm(false);
+          router.push(`/engagements/${eng.id}`);
+        }}
+      />
 
       {error && (
         <Typography

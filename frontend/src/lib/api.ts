@@ -5,6 +5,10 @@ import type {
   EngagementSummary,
   Finding,
   GroupedWordlists,
+  Note,
+  NoteKind,
+  Project,
+  ProjectSummary,
   RemoteGroupedWordlists,
   Severity,
   ToolInfo,
@@ -38,18 +42,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listEngagements: () => request<EngagementSummary[]>("/api/engagements"),
+  listEngagements: (projectId?: string) =>
+    request<EngagementSummary[]>(
+      `/api/engagements${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`
+    ),
 
   createEngagement: (
     target: string,
     name: string,
     notes: string,
     icon: string,
-    methodology: string
+    methodology: string,
+    projectId?: string
   ) =>
     request<Engagement>("/api/engagements", {
       method: "POST",
-      body: JSON.stringify({ target, name, notes, icon, methodology }),
+      body: JSON.stringify({
+        target, name, notes, icon, methodology,
+        ...(projectId ? { project_id: projectId } : {}),
+      }),
     }),
 
   getEngagement: (id: string) =>
@@ -57,6 +68,22 @@ export const api = {
 
   deleteEngagement: (id: string) =>
     request<{ deleted: string }>(`/api/engagements/${id}`, {
+      method: "DELETE",
+    }),
+
+  listProjects: () => request<ProjectSummary[]>("/api/projects"),
+
+  createProject: (name: string, notes: string) =>
+    request<Project>("/api/projects", {
+      method: "POST",
+      body: JSON.stringify({ name, notes }),
+    }),
+
+  getProject: (id: string) =>
+    request<{ project: Project; hosts: EngagementSummary[] }>(`/api/projects/${id}`),
+
+  deleteProject: (id: string) =>
+    request<{ deleted: string; hosts_deleted: number }>(`/api/projects/${id}`, {
       method: "DELETE",
     }),
 
@@ -117,12 +144,6 @@ export const api = {
     request<{ cancelling: string }>(
       `/api/engagements/${engId}/items/${itemId}/cancel`,
       { method: "POST" }
-    ),
-
-  updateNotes: (engId: string, itemId: string, notes: string) =>
-    request<ChecklistItem>(
-      `/api/engagements/${engId}/items/${itemId}/notes`,
-      { method: "PATCH", body: JSON.stringify({ notes }) }
     ),
 
   createItem: (
@@ -303,6 +324,29 @@ export const api = {
   deleteFinding: (engId: string, itemId: string, findingId: string) =>
     request<{ deleted: string }>(
       `/api/engagements/${engId}/items/${itemId}/findings/${findingId}`,
+      { method: "DELETE" }
+    ),
+
+  addNote: (engId: string, itemId: string, kind: NoteKind, content: string) =>
+    request<Note>(
+      `/api/engagements/${engId}/items/${itemId}/notes`,
+      { method: "POST", body: JSON.stringify({ kind, content }) }
+    ),
+
+  updateNote: (
+    engId: string,
+    itemId: string,
+    noteId: string,
+    body: Partial<Pick<Note, "kind" | "content">>
+  ) =>
+    request<Note>(
+      `/api/engagements/${engId}/items/${itemId}/notes/${noteId}`,
+      { method: "PATCH", body: JSON.stringify(body) }
+    ),
+
+  deleteNote: (engId: string, itemId: string, noteId: string) =>
+    request<{ deleted: string }>(
+      `/api/engagements/${engId}/items/${itemId}/notes/${noteId}`,
       { method: "DELETE" }
     ),
 
