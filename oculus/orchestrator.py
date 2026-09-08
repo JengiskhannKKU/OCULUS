@@ -72,7 +72,31 @@ class Orchestrator:
             cancel_event=cancel_event,
         )
 
-        item.tool_outputs[tool_name] = result.output
+        # Append, don't overwrite. A tester re-running the same tool on the
+        # same item against a different path/subresource (e.g. ffuf against
+        # /e1, then again against /e2 once /e1 stops turning anything up)
+        # used to silently destroy every path discovered by the previous
+        # run — engagementPaths.ts/engagementPorts.ts (the Paths/Ports
+        # summary) derive purely from this field's *current* text on every
+        # read, with no separate persisted history, so overwriting it here
+        # made the last run's findings the only ones that still existed
+        # anywhere. Confirmed via a real report: run against one endpoint,
+        # findings show up in Paths; run again against a different one that
+        # finds nothing new, and the first run's paths vanish from Paths
+        # too — not just from this one item's own output panel. A visible
+        # separator marks where each run starts, both so a tester reading
+        # raw output can tell runs apart and so this doesn't read as one
+        # run's output silently containing another's.
+        existing_output = item.tool_outputs.get(tool_name, "")
+        if existing_output:
+            separator = (
+                f"\n\n{'=' * 70}\n"
+                f"# Re-run at {datetime.now().isoformat(timespec='seconds')} — {result.command}\n"
+                f"{'=' * 70}\n\n"
+            )
+            item.tool_outputs[tool_name] = existing_output + separator + result.output
+        else:
+            item.tool_outputs[tool_name] = result.output
         item.time_elapsed_seconds = (
             (item.time_elapsed_seconds or 0) + result.elapsed_seconds
         )

@@ -6,6 +6,68 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-08 (64) — Fix: re-running a tool against a different path wiped out the previous run's discovered paths
+
+**Done (user: "ของ oscp style ตอนผม run พวกหา enpoints มีปัญหา พอเลือก
+enpoint ที่ให้หาเพิ่มใหม่กับที่เดิม เช่น ip/e1 แล้วผมเปลี่ยน ip/e2
+แล้วพอ path ไม่เจออันใหม่มันลบอันเก่าออกเลย" — running an endpoint-
+discovery tool against `/e1`, then re-running the same tool/item
+against `/e2`, made the `/e1` results disappear from the Paths
+summary):**
+- Root cause, traced end to end: `oculus/orchestrator.py`'s
+  `run_tool()` did `item.tool_outputs[tool_name] = result.output` —
+  a flat overwrite on every run. `frontend/src/lib/engagementPaths.ts`
+  (the "Paths" summary button) has no separate persisted history at
+  all — it re-derives the *entire* list live, every time, purely by
+  regex-scanning whatever text currently sits in each item's
+  `tool_outputs`. So the moment a second run against `/e2` overwrote
+  the first run's `/e1` output, every path `/e1`'s run had found
+  vanished from Paths too — not just from that one item's own output
+  panel, which is what made it look like data loss rather than just
+  "the raw output view updated."
+- Fixed at the single write site: re-running the same tool on the same
+  item now **appends** the new run's output after a clearly-marked
+  separator (`# Re-run at <timestamp> — <command>`) instead of
+  replacing it. Confirmed safe for every existing consumer of this
+  field (checked each one directly, not assumed):
+  - `parseDiscoveredPaths`/the ffuf-status-parsing logic
+    (`pathTree.ts`) is a plain line-by-line regex scan with no
+    single-run assumption — separator lines just don't match anything
+    and are silently skipped, exactly like a tool's own banner text
+    already was.
+  - `detectAndFormat` (the Pretty JSON/HTML toggle) degrades safely:
+    `JSON.parse()` on a blob containing more than one run's JSON now
+    throws and is caught, silently falling back to no "Pretty" toggle
+    for that item rather than crashing — a minor, acceptable trade-off
+    (Raw/Filtered views are unaffected) against fixing real data loss.
+  - `findings_extractor.py`'s `extract_findings()` is called with the
+    single fresh `result.output` directly, never the accumulated
+    field, so re-running doesn't create duplicate findings from old
+    runs.
+- `Reset` (explicit, tester-triggered) still does `tool_outputs.clear()`
+  — that remains the deliberate way to wipe an item's history; this fix
+  only changes what a plain re-run does.
+
+**Verified:**
+- `python3 -m py_compile oculus/orchestrator.py`.
+- Direct test against the real `Orchestrator.run_tool()`: ran the same
+  tool twice on one item with two different commands — output length
+  grew across both runs (not replaced), the `# Re-run at ...` separator
+  was present, confirming the accumulation mechanism itself is correct.
+- Rebuilt (`docker compose build backend`) and recreated (`docker
+  compose up -d backend`) the live backend container.
+- Attempted a full live-target re-verification (two `ffuf` runs against
+  different real paths on the same authorized test target from earlier
+  entries, checking both sets of hits survive in the Paths summary) —
+  blocked by the test target's VPN session having since expired (days
+  passed since the last live session; confirmed via `curl` from inside
+  the container timing out on requests that worked repeatedly in
+  earlier entries) — unrelated to this fix. Relied on the direct
+  mechanism-level test above plus a full read-through of every
+  consumer of `tool_outputs` instead.
+
+---
+
 ## 2026-09-03 (63) — Fix: `linpeas` unreachable from a real foothold shell over Docker on macOS
 
 **Done (user got a real shell — `nathan@cap:/tmp$` — on the live test
