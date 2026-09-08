@@ -28,6 +28,7 @@ import { StatusBadge } from "@/components/Badge";
 import { FindingsPanel } from "@/components/FindingsPanel";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { NotesPanel } from "@/components/NotesPanel";
+import { CollapsibleText } from "@/components/CollapsibleText";
 import { RunToolDialog } from "@/components/RunToolDialog";
 import { ChecklistItemDialog } from "@/components/ChecklistItemDialog";
 import { HighlightedOutput } from "@/components/HighlightedOutput";
@@ -355,9 +356,13 @@ export function ItemDetail({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <Typography variant="body2" color="text.secondary" mb={2} lineHeight={1.7}>
-            {item.description}
-          </Typography>
+          <Box mb={2}>
+            <CollapsibleText>
+              <Typography variant="body2" color="text.secondary" lineHeight={1.7}>
+                {item.description}
+              </Typography>
+            </CollapsibleText>
+          </Box>
 
           {item.references.length > 0 && (
             <Link

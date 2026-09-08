@@ -15,6 +15,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast";
+import { CollapsibleText } from "@/components/CollapsibleText";
 import type { ChecklistItem, Note, NoteKind } from "@/lib/types";
 
 const KIND_LABEL: Record<NoteKind, string> = {
@@ -222,7 +223,9 @@ function NoteCard({
               </IconButton>
             </Stack>
           </Stack>
-          <NoteBody note={note} />
+          <CollapsibleText>
+            <NoteBody note={note} />
+          </CollapsibleText>
         </Stack>
       )}
     </Paper>

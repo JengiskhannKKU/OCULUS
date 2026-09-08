@@ -6,6 +6,50 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-08 (68) — feat: collapsible long text (project scope notes, checklist item descriptions, note content)
+
+**Done (user: "add collapse description at project and checklists
+notes or anythings" — long text blocks like a checklist item's
+description or a note's content were always fully expanded, taking up
+a lot of vertical space):**
+
+- `frontend/src/components/CollapsibleText.tsx` (new, reusable) —
+  clamps arbitrary content (a paragraph, a bullet list, a code block —
+  anything, via `children`) to a fixed collapsed height and shows a
+  "Show more"/"Show less" toggle underneath, but *only* when the
+  content actually overflows that height. Overflow is measured
+  directly (`scrollHeight` vs the collapsed height via a `ref` +
+  `useLayoutEffect`), not guessed from character count, so a
+  genuinely short description/note never grows a pointless toggle.
+- Applied to the three places that carry real free text:
+  - `ItemDetail.tsx` — each checklist item's own `description`.
+  - `frontend/src/app/projects/[id]/page.tsx` — a project's
+    `scope_notes` in the detail-page header.
+  - `NotesPanel.tsx` — each individual note's rendered content (the
+    exact "checklist notes" the request named), independently
+    collapsible per note regardless of `kind` (text/list/code).
+- `frontend/src/app/projects/page.tsx`'s project *cards* (grid list,
+  not the detail page) got a simpler non-interactive 3-line CSS clamp
+  instead of the full toggle — the whole card is itself a `Link` to
+  the project, and nesting an interactive expand button inside a
+  clickable card is the same invalid-HTML/click-bubbling problem
+  entry 53 already had to work around for `EvidencePanel`; a card is
+  a "click through for the full text" context anyway.
+
+**Verified:**
+- `tsc --noEmit`, `eslint`, `next build` all clean.
+- Rebuilt (`docker compose build frontend`) and recreated the live
+  frontend container.
+- Live browser walkthrough against the real HTB Cap engagement:
+  `OSCP-EXPLOIT-04`'s genuinely long description rendered clamped with
+  a real "Show more" link; clicking it correctly expanded to the full
+  text and flipped the label to "Show less". Added a real 8-line
+  `code`-kind note via the API to the same item, confirmed it rendered
+  clamped with its own independent "Show more" toggle (separate from
+  the description's), then deleted the test note afterward.
+
+---
+
 ## 2026-09-08 (67) — feat: structured, multi-entry Notes (Text/List/Code) per checklist item
 
 **Done (user, after confirming per-item Notes already existed as a

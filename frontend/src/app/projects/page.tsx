@@ -125,7 +125,18 @@ function ProjectCard({
         </Stack>
 
         {project.scope_notes && (
-          <Typography variant="body2" color="text.secondary" mb={2} sx={{ flex: 1 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            mb={2}
+            sx={{
+              flex: 1,
+              display: "-webkit-box",
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
             {project.scope_notes}
           </Typography>
         )}

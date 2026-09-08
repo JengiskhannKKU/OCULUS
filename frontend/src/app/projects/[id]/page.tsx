@@ -19,6 +19,7 @@ import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 import { EngagementCard } from "@/components/EngagementCard";
 import { NewHostDialog } from "@/components/NewHostDialog";
+import { CollapsibleText } from "@/components/CollapsibleText";
 import type { Project, EngagementSummary } from "@/lib/types";
 
 export default function ProjectDetailPage() {
@@ -84,9 +85,13 @@ export default function ProjectDetailPage() {
                 {project.name}
               </Typography>
               {project.scope_notes && (
-                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 640 }}>
-                  {project.scope_notes}
-                </Typography>
+                <Box sx={{ maxWidth: 640 }}>
+                  <CollapsibleText>
+                    <Typography variant="body2" color="text.secondary">
+                      {project.scope_notes}
+                    </Typography>
+                  </CollapsibleText>
+                </Box>
               )}
             </>
           ) : (
