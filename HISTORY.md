@@ -6,6 +6,268 @@ was verified, and what the next agent should pick up.
 
 ---
 
+## 2026-09-10 (76) — Split re-run history into a per-run dropdown
+
+**Done (user: "can you split history when run more than 2 to each tab
+or dropdown"):** re-running a tool appends to the same
+`item.tool_outputs[tool]` string fenced with `# Re-run at <ts> — <cmd>`
+separators (entry 62), so one tab could hold 8 stacked ffuf scans with
+no way to look at just one.
+
+- `frontend/src/lib/toolRuns.ts` (new): `splitToolRuns(output)` parses
+  that blob back into `{index, label, timestamp, command, text}[]`
+  (chronological), plus `formatRunTimestamp` (`2026-09-10T04:25:56` ->
+  `09-10 04:25:56`). Separator regex `={20,}\n# Re-run at (\S+)\s+[—-]\s+(.*)\n={20,}`.
+- `frontend/src/components/ItemDetail.tsx`: when the active tool tab
+  has >= 2 runs, a "Run" `<TextField select>` appears in the filter
+  row — newest first, each `Run N · <time>` (latest tagged "(latest)",
+  the original just "Run 1"), then "All runs (N)". `runSel` state:
+  `null` = auto (always resolves to the latest run, so a fresh re-run
+  doesn't leave the panel pinned to a stale one), a number pins one
+  run, `"all"` = the old concatenated view. Everything downstream
+  (`displayedRawOutput`, the Tree `discoveredEntries`, `prettyResult`,
+  raw/tree/pretty toggles, substring + status filters, the Expand
+  popup) now reads the selected run's slice, not the whole blob. When
+  a specific run is selected its exact command line shows as a
+  `$ …` caption above the output. Switching tool tabs resets to auto.
+  Single-run tools show no dropdown (unchanged).
+
+**Verified live** (browser, LUGX `52459b2b`, WSTG-INFO-06 ffuf — 8
+runs): dropdown listed Run 8 (latest) · 09-10 04:25:56 down to Run 1
+and "All runs (8)"; picking Run 1 showed only its output (its banner
+names `common.txt`, vs Run 8's `Apache-Axis.txt` — confirming it's a
+real slice) with no command caption (Run 1 has no separator header);
+"All runs (8)" restored the full stacked view; switching to the
+`katana` tab (1 run) hid the dropdown. `tsc`/`eslint` clean;
+`docker compose build frontend` + `up -d`.
+
+**Next:** a pinned run index that happened to be the previous latest
+doesn't auto-advance when a newer run lands (only the `null`/auto
+default follows latest) — fine for now, revisit if it annoys anyone.
+
+---
+
+## 2026-09-10 (75) — Edit status/note on any path in the Paths dialog
+
+**Done (user: "implement at paths can edit status or anything on that
+path"):** the Paths tree could only add a wholly-new manual path or
+remove/hide an existing one — no way to fix a wrong status or annotate
+an auto-discovered path. Added an inline editor:
+
+- `frontend/src/components/DirectoryTree.tsx`: new optional
+  `onEdit?(path)` prop → a pencil (hover) button on every observed
+  row, next to Run/Remove. Also a persistent purple sticky-note icon +
+  tooltip on any row that has a note.
+- `frontend/src/lib/pathTree.ts`: `TreeNode.note?: string`,
+  propagated from the entry in `buildPathTree()`
+  (`EngagementPathEntry.note` already carried it from
+  `collectEngagementPaths`, only the tree didn't).
+- `frontend/src/components/PathsDialog.tsx`: a small nested dialog
+  (path title, Status field, multiline Note field, Save/Cancel).
+  Save calls the existing `onAdd` prop → `api.addManualPath`, which is
+  already an upsert. For an auto-discovered path this writes a manual
+  entry for that exact path string; `collectEngagementPaths` already
+  lets a manual entry win the collision with the tool-parsed one, so
+  the edit sticks and survives re-scans. To drop an override, Remove
+  the row — `remove_path` deletes the manual entry (it's `was_manual`)
+  and the auto value reappears. No backend change.
+
+**Verified live** (browser, real LUGX engagement — note its id is now
+`52459b2b`; `a86b6e3a` was deleted+recreated by the user, probably
+into the "Project Presentation" project): hovered `/index.html` (auto
+`200 open`) → pencil appeared → editor prefilled status `200`, empty
+note → changed to `401` + a note → Save → row switched to `manual`
+chip + `401 needs auth` + note icon whose tooltip showed the text;
+status-filter chips updated (`200 ×8`→`×7`, new `401 ×1`). Re-opening
+the editor prefilled the edited `401`/note. Removed the row → back to
+auto `200 open`, chips restored. Confirmed on disk `manual_paths` went
+`[]`→`[{...}]`→`[]` (did everything through the UI this time — see
+entry 73's data-loss note).
+`tsc`/`eslint` clean; `docker compose build frontend` + `up -d`.
+
+**Next:** `PathGraph` (the Graph view toggle) has no edit affordance —
+only the Tree view does. Add `onEdit` there too if the user wants
+parity. `2.1.0-dev` bogus-path parse still open (entry 73).
+
+---
+
+## 2026-09-10 (74) — ffuf recursive scan modes
+
+**Done (user: "at ffuf can you implement can select script that
+recursive to find path"):** ffuf only ever fuzzed one directory level.
+Added a `modes` dict to `oculus/tools/ffuf_tool.py` (the same
+mechanism nmap uses — a non-empty `modes` makes the Run Tool dialog
+swap its Fast switch for a "Scan mode" dropdown, no frontend change):
+
+- `quick` — single level, 30s cap
+- `full` — single level (the old default)
+- `recursive` — `-recursion -recursion-depth 2` (ffuf's default
+  strategy: only recurse into redirect-to-`/dir/` hits)
+- `recursive_greedy` — depth 2 + `-recursion-strategy greedy`
+  (recurse into every match, not just redirects)
+- `recursive_deep` — depth 4 + greedy
+
+All recursive modes also add `-maxtime 540` — recursion has no natural
+end (work grows with each directory found), and a `-maxtime` stop
+exits 0 with partial results kept, whereas the hard `timeout_seconds`
+kill marks the run FAILED and appends `[TIMEOUT]`. Bumped
+`timeout_seconds` 300 -> 600 to give the 540s budget headroom.
+`build_command()` refactored to share `_base_command()` with the new
+`build_command_for_mode()`. The preview endpoint
+(`backend/routers/tools.py`) already routes mode -> `build_command_for_mode`
+then `apply_tool_overrides`, so the item's recommended wordlist is
+still swapped in for a recursive run.
+
+**Verified:**
+- `py_compile` clean; `GET /api/tools` shows the 5 ffuf modes;
+  `GET /api/tools/ffuf/command?mode=recursive` returns the
+  `-recursion -recursion-depth 2 -maxtime 540` command.
+- `docker compose build backend` + `up -d` (frontend unchanged).
+- Live browser on LUGX (`a86b6e3a`), WSTG-INFO-06, ffuf: the "Scan
+  mode" dropdown appeared with all 5 options; picking "Recursive
+  (depth 2, redirect dirs)" put the recursion flags in the command
+  box; ran it against the live `192.168.2.11` with common.txt —
+  output showed `[INFO] Starting queued job on target:
+  http://192.168.2.11/assets/scripts/FUZZ` (Job [7/7] — 7 recursive
+  jobs queued), found paths two levels deep, and the Paths tree filled
+  in with real nested structure (`/assets/{css,images,js,scripts}`,
+  `/vendor/...`) where before ffuf only ever returned top-level
+  `/assets` + `/vendor`.
+
+**Next:** ffuf recurses `.htaccess`/`.htpasswd` probes into every
+discovered dir, so those show up repeated under each folder in the
+tree — cosmetic, it's ffuf's own behaviour. The `2.1.0-dev` banner
+still parses as a bogus path (entry 73's Next).
+
+---
+
+## 2026-09-10 (73) — Fix: ffuf's discovered paths never reached the Paths view (ANSI colour codes)
+
+**Done (user pasted a real ffuf run and noted "this is example result
+that is not include to path"):**
+
+- Root cause: the ffuf default command runs with `-c` (colour), so
+  results are stored as
+  `\x1b[2K\x1b[33m[Status: 403 ...]\x1b[0m` /
+  `\x1b[2K| URL | http://192.168.2.11/.htpasswd`. `.trim()` doesn't
+  remove a leading ESC, so the line no longer starts with `[Status:`
+  or `|` — and every downstream matcher failed silently:
+  `pathTree.ts`'s `FFUF_STATUS_RE` / `FFUF_MOCK_URL_RE` (so no ffuf
+  path ever entered the Paths tree/count/graph), `logFilter.ts`'s
+  progress-noise filter (so the "Filtered" view still showed the
+  `:: Progress:` spam), and `HighlightedOutput.tsx` (so the raw view
+  showed literal `[2K[33m` garbage). katana's uncoloured output was
+  unaffected, which is why only katana paths ever showed.
+- `oculus/tools/base.py`: strip ANSI/VT100 CSI sequences from every
+  captured line in `run_tool()`'s reader (`_ANSI_RE`). This app
+  re-colours all tool output itself, so a tool's own escapes are pure
+  noise everywhere — fix at the source for all future runs.
+- Frontend defensive strip for runs already stored with escapes
+  (no data migration): `stripAnsi()` + `ANSI_RE` in `logFilter.ts`,
+  applied in `isNoiseLine()`, `parseDiscoveredPaths()`,
+  `filterRawByStatus()` (match on the stripped line, keep display
+  verbatim there), and `HighlightedOutput` (render stripped).
+
+**Verified:**
+- Against the real stored LUGX (`a86b6e3a`) ffuf output: parser went
+  from 0 paths → all 7 with correct statuses (`/.hta` `/.htpasswd`
+  `/.htaccess` 403, `/assets` `/vendor` 301, `/index.html` 200,
+  `/server-status` 403).
+- `tsc --noEmit`, `eslint`, `py_compile` clean; `docker compose build
+  frontend backend` + `up -d` (both recreated, health 200/200).
+- Live browser: LUGX Paths dialog now shows all 8 ffuf entries with
+  status chips + filter chips "200×1 / 301×2 / 403×4"; raw output view
+  renders clean (no escape garbage).
+
+**Data-loss note & recovery:** during entry 72's live remove-path
+test I ran `katana -version` on LUGX WSTG-INFO-06 then hand-edited the
+engagement JSON to revert it; that sequence (a plain `json.dump`
+racing the backend's own `state.save`) dropped that item's katana
+crawl output. Caught it this session — re-ran katana against the
+still-reachable `192.168.2.11` (finished 13.5s, 15 paths), so the
+crawl is restored (contact.html / shop.html / product-details.html /
+assets/* / vendor/*). LUGX Paths back to 23 (8 ffuf + 15 katana).
+Lesson: never hand-edit a `~/.oculus/engagements/*.json` while the
+backend is running — go through the API or stop the container first.
+
+**Next:** the ffuf ASCII banner line `2.1.0-dev` still gets parsed as
+a bogus path (`BARE_PATH_RE`, ffuf-gated) — shows as "status unknown"
+in the tree. Minor, pre-existing; skip a bare semver line to fix.
+
+---
+
+## 2026-09-10 (72) — Fix: a removed path stayed hidden forever, even after a re-run rediscovered it
+
+**Done (user: "when i run tool then discover path then remove then run
+again it not appear at path function can you fix it"):**
+
+- Root cause: `removed_paths` on the engagement (set by `POST
+  /paths/remove` for an auto-discovered path — see
+  `backend/routers/paths.py`) is a permanent hide-list.
+  `collectEngagementPaths()` in `frontend/src/lib/engagementPaths.ts`
+  filters anything in it out unconditionally, and nothing ever took a
+  path back off that list except the manual `Restore` button /
+  `POST /paths/restore`. So: run a tool → path found → remove it →
+  re-run the same (or any) tool → the path is still plainly in that
+  tool's raw output (orchestrator *appends* re-run output, never
+  overwrites — entry 62), `collectEngagementPaths()` re-parses it, but
+  `removed_paths` still lists it, so it stays invisible.
+- Fix in `frontend/src/app/engagements/[id]/page.tsx`'s `updateItem`
+  (the callback `RunToolDialog`'s `onDone` → `ItemDetail`'s `onChange`
+  fires with the freshly-updated item after every tool run): re-parse
+  the finished item's `tool_outputs` with `parseDiscoveredPaths()`;
+  for any path that comes back AND is currently in `removed_paths`,
+  drop it from `removed_paths` locally (instant UI) and fire
+  `api.restorePath()` to persist. Rationale: re-running a tool is a
+  deliberate "look here again" — a path it turns up again no longer
+  deserves to stay hidden. A path the re-run does *not* turn up again
+  stays hidden as before.
+- Scope: paths only, as asked. `removed_ports` has the identical
+  latent bug (permanent hide-list, no auto-clear) — left untouched
+  this pass; flag for a follow-up if the user hits it.
+
+**Verified:**
+- `tsc --noEmit` + `eslint` clean; `docker compose build frontend` +
+  `up -d` (frontend container recreated, `curl localhost:3000` → 200).
+- Live browser end-to-end on the real `a86b6e3a` (LUGX) engagement:
+  opened Paths (16) → removed `/shop.html` (toast "Removed
+  /shop.html", count 16→15, "Show hidden (1)" link appeared, tree row
+  gone) → ran katana on WSTG-INFO-06 (custom command `katana -version`
+  so it finishes instantly; the old crawl output with `/shop.html` is
+  preserved by the append) → on "Done", count went 15→16 on its own,
+  `/shop.html` reappeared in the tree, "Show hidden" link gone.
+- Confirmed persistence: `~/.oculus/engagements/a86b6e3a.json`
+  `removed_paths` went `["/shop.html"]` → `[]` after the re-run.
+- Reverted the throwaway `katana -version` re-run section from that
+  engagement's WSTG-INFO-06 katana output afterwards so the user's
+  real data is untouched.
+
+**Next:** `removed_ports` has the same permanent-hide-list bug if it
+ever comes up. CLI/TUI still have no Projects support (entry 66).
+
+---
+
+## 2026-09-10 (71) — Collapsible tool description in the Run Tool dialog
+
+**Done (user: "at tools description can you add collapse
+description"):** wrapped the selected tool's description + example
+command (the info `Alert` in `frontend/src/components/RunToolDialog.tsx`)
+in the existing `CollapsibleText` component (`collapsedHeight={56}`),
+same one already used for project/checklist notes (entry 67-ish). Only
+tools whose combined description+example actually overflow ~56px grow a
+"Show more"/"Show less" toggle — overflow is measured from
+`scrollHeight`, so the majority of tools (one-line descriptions) show
+no toggle at all. Left `ToolHelpDialog`'s one-line caption subtitle
+alone (never overflows).
+
+**Verified:** `tsc --noEmit` + `eslint` clean; `docker compose build
+frontend` + `up -d`. Live browser: opened Run Tool → `amass` (has a
+long multi-sentence note about v5's separate engine process) → showed
+3 lines + "Show more"; clicked it → full note + example command
+visible, button flips to "Show less"; clicked again → re-collapses.
+
+---
+
 ## 2026-09-08 (70) — Fix: zap's own confirmed 200s never reached the Paths tree
 
 **Done (user: "when run zap then it 200 but it not update and any

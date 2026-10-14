@@ -2,7 +2,7 @@
 // (both the real tools' formats and this project's own mock_output()
 // formats — see oculus/tools/ffuf_tool.py, gobuster_tool.py, katana_tool.py)
 // and builds them into a tree for the "Tree view" toggle in ItemDetail.
-import { NOISE_LINE_RE } from "./logFilter";
+import { NOISE_LINE_RE, stripAnsi } from "./logFilter";
 
 export interface TreeNode {
   name: string;
@@ -11,6 +11,7 @@ export interface TreeNode {
   observed: boolean; // this exact path was an actual result, not just an inferred parent segment
   status: number | null; // HTTP status code for this exact path, if the tool's output carried one
   manual: boolean; // added by hand (see engagementPaths.ts) rather than parsed from a tool's output
+  note?: string; // free-text annotation a tester attached to this exact path
 }
 
 // ffuf's own "-v" verbose format: a "[Status: 200, Size: ..., ...]" line
@@ -65,7 +66,7 @@ export function parseDiscoveredPaths(
   let pendingStatus: number | null = null;
 
   for (const raw of output.split("\n")) {
-    const line = raw.trim();
+    const line = stripAnsi(raw).trim();
     if (!line || IGNORE_LINE_RE.test(line)) continue;
 
     let m = line.match(FFUF_STATUS_RE);
@@ -126,7 +127,7 @@ export function parseDiscoveredPaths(
 }
 
 export function buildPathTree(
-  entries: { path: string; status: number | null; manual?: boolean }[]
+  entries: { path: string; status: number | null; manual?: boolean; note?: string }[]
 ): TreeNode {
   const root: TreeNode = {
     name: "/",
@@ -138,7 +139,7 @@ export function buildPathTree(
   };
   const index = new Map<string, TreeNode>([["", root]]);
 
-  for (const { path, status, manual } of entries) {
+  for (const { path, status, manual, note } of entries) {
     const segments = path.split("/").filter(Boolean);
     let current = root;
     let currentPath = "";
@@ -161,6 +162,7 @@ export function buildPathTree(
         node.observed = true;
         node.status = status;
         node.manual = manual ?? false;
+        node.note = note || undefined;
       }
       current = node;
     });
@@ -201,7 +203,7 @@ export function filterRawByStatus(output: string, status: number): string {
   let pendingStatus: number | null = null;
 
   for (const raw of lines) {
-    const trimmed = raw.trim();
+    const trimmed = stripAnsi(raw).trim();
 
     const statusMatch = trimmed.match(FFUF_STATUS_RE);
     if (statusMatch) {

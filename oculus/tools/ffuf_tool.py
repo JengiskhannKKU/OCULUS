@@ -19,10 +19,24 @@ class FfufTool(BaseTool):
         "apt": "sudo apt install -y ffuf",
         "go": "go install github.com/ffuf/ffuf/v2@latest",
     }
-    timeout_seconds = 300
+    timeout_seconds = 600
 
-    def build_command(self, fast: bool = False) -> list[str]:
-        cmd = [
+    # ffuf only fuzzes one directory level at a time. "Recursive" turns on
+    # ffuf's own -recursion so every directory it finds (a 301 -> /dir/, or
+    # any hit with greedy) is re-queued as a new FUZZ point — that's the
+    # "script that recurses to find paths" ask. Kept as explicit modes
+    # rather than always-on because recursion multiplies runtime by the
+    # number of directories found and is rarely wanted for a first pass.
+    modes = {
+        "quick": "Quick (single level, 30s cap)",
+        "full": "Full (single level)",
+        "recursive": "Recursive (depth 2, redirect dirs)",
+        "recursive_greedy": "Recursive greedy (depth 2, every hit)",
+        "recursive_deep": "Recursive deep (depth 4, greedy)",
+    }
+
+    def _base_command(self) -> list[str]:
+        return [
             "ffuf",
             "-u", f"{base_url(self.target)}/FUZZ",
             "-w", default_wordlist(),
@@ -37,9 +51,31 @@ class FfufTool(BaseTool):
             "-t", "50",
             "-c", "-v",
         ]
+
+    def build_command(self, fast: bool = False) -> list[str]:
+        cmd = self._base_command()
         if fast:
             cmd += ["-maxtime", "30"]
         return cmd
+
+    def build_command_for_mode(self, mode: str) -> list[str]:
+        if mode == "quick":
+            return self.build_command(fast=True)
+        if mode == "full":
+            return self.build_command(fast=False)
+        if mode in ("recursive", "recursive_greedy", "recursive_deep"):
+            cmd = self._base_command()
+            depth = "4" if mode == "recursive_deep" else "2"
+            cmd += ["-recursion", "-recursion-depth", depth]
+            if mode in ("recursive_greedy", "recursive_deep"):
+                cmd += ["-recursion-strategy", "greedy"]
+            # Recursion has no natural end (work grows with every directory
+            # found), so cap it well under timeout_seconds — a -maxtime stop
+            # exits 0 with partial results kept, a hard timeout kill marks
+            # the run FAILED and tags "[TIMEOUT]" onto the output.
+            cmd += ["-maxtime", "540"]
+            return cmd
+        return super().build_command_for_mode(mode)
 
     def mock_output(self) -> str:
         return f"""\

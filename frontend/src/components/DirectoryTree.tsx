@@ -12,6 +12,8 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 import CloseIcon from "@mui/icons-material/Close";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import StickyNote2OutlinedIcon from "@mui/icons-material/StickyNote2Outlined";
 import Chip from "@mui/material/Chip";
 import type { TreeNode } from "@/lib/pathTree";
 
@@ -52,11 +54,13 @@ function Node({
   depth,
   onRunHere,
   onRemove,
+  onEdit,
 }: {
   node: TreeNode;
   depth: number;
   onRunHere: (path: string) => void;
   onRemove?: (path: string) => void;
+  onEdit?: (path: string) => void;
 }) {
   const [open, setOpen] = useState(depth < 1);
   const hasChildren = node.children.length > 0;
@@ -110,7 +114,24 @@ function Node({
           />
         )}
         {node.observed && <StatusChip status={node.status} />}
+        {node.observed && node.note && (
+          <Tooltip title={node.note}>
+            <StickyNote2OutlinedIcon fontSize="small" sx={{ color: "#a855f7", fontSize: 15 }} />
+          </Tooltip>
+        )}
         <Box flex={1} />
+        {onEdit && node.observed && (
+          <Tooltip title={`Edit status/note for ${node.path}`}>
+            <IconButton
+              size="small"
+              className="row-hover-btn"
+              onClick={() => onEdit(node.path)}
+              sx={{ p: 0.25, opacity: 0, transition: "opacity 0.1s" }}
+            >
+              <EditOutlinedIcon fontSize="small" sx={{ color: "#60a5fa" }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title={`Run a tool against ${node.path}`}>
           <IconButton
             size="small"
@@ -143,6 +164,7 @@ function Node({
               depth={depth + 1}
               onRunHere={onRunHere}
               onRemove={onRemove}
+              onEdit={onEdit}
             />
           ))}
         </Box>
@@ -155,12 +177,14 @@ export function DirectoryTree({
   root,
   onRunHere,
   onRemove,
+  onEdit,
   emptyMessage = "No directory/file paths could be parsed from this output.",
   maxHeight = 320,
 }: {
   root: TreeNode;
   onRunHere: (path: string) => void;
   onRemove?: (path: string) => void;
+  onEdit?: (path: string) => void;
   emptyMessage?: string;
   maxHeight?: number | string;
 }) {
@@ -174,7 +198,14 @@ export function DirectoryTree({
   return (
     <Box sx={{ maxHeight, overflow: "auto" }}>
       {root.children.map((child) => (
-        <Node key={child.path} node={child} depth={0} onRunHere={onRunHere} onRemove={onRemove} />
+        <Node
+          key={child.path}
+          node={child}
+          depth={0}
+          onRunHere={onRunHere}
+          onRemove={onRemove}
+          onEdit={onEdit}
+        />
       ))}
     </Box>
   );

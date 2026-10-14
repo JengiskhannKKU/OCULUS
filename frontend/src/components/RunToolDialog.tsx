@@ -26,13 +26,14 @@ import StopIcon from "@mui/icons-material/Stop";
 import SearchIcon from "@mui/icons-material/Search";
 import IconButton from "@mui/material/IconButton";
 import { motion } from "framer-motion";
-import { api, WS_BASE } from "@/lib/api";
+import { api, authToken, WS_BASE } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 import { HighlightedLine } from "@/components/HighlightedOutput";
 import { InstallHints } from "@/components/InstallHints";
 import { WordlistPickerDialog } from "@/components/WordlistPickerDialog";
 import { ToolHelpDialog } from "@/components/ToolHelpDialog";
 import { ToolLogo } from "@/components/ToolLogo";
+import { CollapsibleText } from "@/components/CollapsibleText";
 import { isIpAddress } from "@/lib/target";
 import { filterNoiseLines } from "@/lib/logFilter";
 import type { ChecklistItem, ToolInfo, WsMessage } from "@/lib/types";
@@ -219,7 +220,7 @@ export function RunToolDialog({
     let startNotified = false;
 
     const ws = new WebSocket(
-      `${WS_BASE}/ws/engagements/${engagementId}/items/${item.id}/run`
+      `${WS_BASE}/ws/engagements/${engagementId}/items/${item.id}/run?token=${encodeURIComponent(authToken() ?? "")}`
     );
     wsRef.current = ws;
 
@@ -480,11 +481,13 @@ export function RunToolDialog({
         {tool && (
           <Stack spacing={1.5} mb={2}>
             <Alert severity="info" variant="outlined" icon={<ToolLogo name={tool.name} size={22} />}>
-              {tool.description}
-              <br />
-              <Typography component="span" sx={{ fontFamily: "var(--font-geist-mono)", fontSize: 12 }}>
-                {tool.example}
-              </Typography>
+              <CollapsibleText collapsedHeight={56}>
+                {tool.description}
+                <br />
+                <Typography component="span" sx={{ fontFamily: "var(--font-geist-mono)", fontSize: 12 }}>
+                  {tool.example}
+                </Typography>
+              </CollapsibleText>
             </Alert>
             {!tool.available && (
               <InstallHints toolName={tool.name} hints={tool.install_hints} />

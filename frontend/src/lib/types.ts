@@ -208,3 +208,18 @@ export type WsMessage =
   | { type: "line"; data: string }
   | { type: "done"; item: ChecklistItem; result: RunResult }
   | { type: "error"; message: string };
+
+export interface ToolRunLog {
+  id: string;
+  timestamp: string;
+  kind: "tool_failure" | "tool_exception" | string;
+  engagement_id: string;
+  item_id: string;
+  tool: string;
+  command: string;
+  exit_code?: number;
+  elapsed_seconds?: number;
+  output: string;
+  error?: string;
+  traceback?: string;
+}

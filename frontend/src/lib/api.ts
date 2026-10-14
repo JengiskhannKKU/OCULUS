@@ -12,6 +12,7 @@ import type {
   RemoteGroupedWordlists,
   Severity,
   ToolInfo,
+  ToolRunLog,
   WordlistInfo,
 } from "./types";
 
@@ -21,9 +22,16 @@ export const API_BASE =
 export const WS_BASE =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
 
+export const authToken = () =>
+  typeof window === "undefined" ? null : window.localStorage.getItem("oculus_access_token");
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = authToken();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   });
   if (!res.ok) {
@@ -42,6 +50,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (username: string, password: string) =>
+    request<{ access_token: string; token_type: string; expires_in: number; username: string }>(
+      "/api/auth/login",
+      { method: "POST", body: JSON.stringify({ username, password }) }
+    ),
+  register: (username: string, password: string) =>
+    request<{ access_token: string; token_type: string; expires_in: number; username: string }>(
+      "/api/auth/register",
+      { method: "POST", body: JSON.stringify({ username, password }) }
+    ),
+
+  listToolRunLogs: (engId?: string) =>
+    request<ToolRunLog[]>(`/api/logs/tool-runs?limit=200${engId ? `&eng_id=${encodeURIComponent(engId)}` : ""}`),
+
   listEngagements: (projectId?: string) =>
     request<EngagementSummary[]>(
       `/api/engagements${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`
@@ -194,6 +216,7 @@ export const api = {
     form.append("description", description);
     const res = await fetch(`${API_BASE}/api/engagements/${engId}/items/${itemId}/evidence`, {
       method: "POST",
+      headers: { ...(authToken() ? { Authorization: `Bearer ${authToken()}` } : {}) },
       body: form,
     });
     if (!res.ok) {
@@ -214,7 +237,7 @@ export const api = {
     form.append("description", description);
     return fetch(
       `${API_BASE}/api/engagements/${engId}/items/${itemId}/evidence/${evidenceId}`,
-      { method: "PATCH", body: form }
+      { method: "PATCH", headers: { ...(authToken() ? { Authorization: `Bearer ${authToken()}` } : {}) }, body: form }
     ).then((res) => {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       return res.json() as Promise<ChecklistItem>;
@@ -228,7 +251,7 @@ export const api = {
     ),
 
   evidenceFileUrl: (engId: string, itemId: string, evidenceId: string) =>
-    `${API_BASE}/api/engagements/${engId}/items/${itemId}/evidence/${evidenceId}/file`,
+    `${API_BASE}/api/engagements/${engId}/items/${itemId}/evidence/${evidenceId}/file?token=${encodeURIComponent(authToken() ?? "")}`,
 
   listTools: () => request<ToolInfo[]>("/api/tools"),
 
@@ -351,7 +374,7 @@ export const api = {
     ),
 
   reportUrl: (engId: string, format: "md" | "docx") =>
-    `${API_BASE}/api/engagements/${engId}/report?format=${format}`,
+    `${API_BASE}/api/engagements/${engId}/report?format=${format}&token=${encodeURIComponent(authToken() ?? "")}`,
 
   getReportContent: (engId: string) =>
     request<{ content: string }>(`/api/engagements/${engId}/report/content`),

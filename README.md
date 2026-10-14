@@ -152,9 +152,9 @@ cp .env.example .env.local    # points at http://127.0.0.1:8000 by default
 npm run dev
 ```
 
-Open **http://localhost:3000** — a landing page with a link into the dashboard at `/engagements` (the engagement list). The backend reads/writes the same `~/.oculus/engagements/` JSON store as the CLI and TUI, so engagements are shared across all three interfaces.
+Open **http://localhost:3000** and sign in or create an account. On first backend start the default account is `admin` / `admin`; set `OCULUS_USERNAME` and `OCULUS_PASSWORD` before that first start to choose credentials. Additional users can register from `/register` or `POST /api/auth/register`. The backend reads/writes the same `~/.oculus/engagements/` JSON store as the CLI and TUI, so engagements are shared across all three interfaces.
 
-> **No authentication** — same single-user/local trust model as the CLI. Don't expose port 8000/3000 beyond a trusted network without adding one.
+Authenticated tool failures are retained in `~/.oculus/logs/tool-runs.jsonl` and are available in the UI's **ERROR LOGS** page or `GET /api/logs/tool-runs`. Each entry includes the command, exit code, captured output, and traceback when the backend itself raised an exception.
 
 ---
 

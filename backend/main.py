@@ -1,10 +1,12 @@
 """FastAPI entry point: `uvicorn backend.main:app --reload`."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import config, engagements, evidence, findings, items, notes, paths, ports, projects, reports, tools
+from .auth import verify_token
+from .routers import auth, config, engagements, evidence, findings, items, logs, notes, paths, ports, projects, reports, tools
 from .ws import router as ws_router
 
 app = FastAPI(title="oculus web", version="0.1.0")
@@ -24,6 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def authentication_middleware(request: Request, call_next):
+    if request.method == "OPTIONS" or request.url.path in {"/api/health", "/api/auth/login", "/api/auth/register"}:
+        return await call_next(request)
+    if request.url.path.startswith("/api/"):
+        token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+        # Browser download links cannot attach an Authorization header.
+        token = token or request.query_params.get("token")
+        if not verify_token(token):
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+    return await call_next(request)
+
+app.include_router(auth.router)
 app.include_router(config.router)
 app.include_router(engagements.router)
 app.include_router(projects.router)
@@ -35,6 +51,7 @@ app.include_router(findings.router)
 app.include_router(notes.router)
 app.include_router(tools.router)
 app.include_router(reports.router)
+app.include_router(logs.router)
 app.include_router(ws_router)
 
 

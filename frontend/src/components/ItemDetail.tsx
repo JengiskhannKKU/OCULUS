@@ -7,6 +7,7 @@ import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
+import MenuItem from "@mui/material/MenuItem";
 import Link from "@mui/material/Link";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -43,6 +44,7 @@ import {
 } from "@/lib/pathTree";
 import { detectAndFormat } from "@/lib/prettyFormat";
 import type { PrettyKind } from "@/lib/prettyFormat";
+import { splitToolRuns, formatRunTimestamp } from "@/lib/toolRuns";
 import { useToast } from "@/lib/toast";
 import type { ChecklistItem, ToolInfo } from "@/lib/types";
 
@@ -117,6 +119,11 @@ export function ItemDetail({
   // permission" without hand-reading the whole dump.
   const [filterQuery, setFilterQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<number | null>(null);
+  // Which re-run of the active tool to show. `null` means "auto" — follow
+  // the latest run, so a fresh re-run doesn't leave the panel pinned to a
+  // stale earlier one. `"all"` shows every run concatenated (the old
+  // behavior). A number pins one specific run.
+  const [runSel, setRunSel] = useState<number | "all" | null>(null);
   // Popup for reading a result at a larger, adjustable scale — the inline
   // panel below is capped at a small maxHeight/font size so the rest of
   // the checklist item stays usable, which makes a long/dense result
@@ -130,12 +137,33 @@ export function ItemDetail({
     // over and hide everything in an unrelated nmap tab.
     setFilterQuery("");
     setStatusFilter(null);
+    setRunSel(null);
   }
+
+  // The active tool's output split into its individual runs (see
+  // splitToolRuns). One run for a tool that's only been run once.
+  const runs = useMemo(
+    () => splitToolRuns(activeOutput ? (item.tool_outputs[activeOutput] ?? "") : ""),
+    [activeOutput, item.tool_outputs]
+  );
+  const hasRunHistory = runs.length >= 2;
+  // Resolve `runSel` to a concrete choice: auto -> latest run; a stale
+  // pinned index (tab changed, or a run vanished on Reset) -> latest too.
+  const effectiveRunSel: number | "all" =
+    runSel === "all"
+      ? "all"
+      : runSel !== null && runSel >= 0 && runSel < runs.length
+        ? runSel
+        : runs.length - 1;
+  const activeRunText =
+    effectiveRunSel === "all"
+      ? (activeOutput ? (item.tool_outputs[activeOutput] ?? "") : "")
+      : (runs[effectiveRunSel]?.text ?? "");
 
   const discoveredEntries = useMemo(() => {
     if (!activeOutput) return [];
-    return parseDiscoveredPaths(item.tool_outputs[activeOutput] ?? "", activeOutput);
-  }, [activeOutput, item.tool_outputs]);
+    return parseDiscoveredPaths(activeRunText, activeOutput);
+  }, [activeOutput, activeRunText]);
   const hasDiscoveredPaths = discoveredEntries.length > 0;
   const availableStatuses = useMemo(() => collectStatuses(discoveredEntries), [discoveredEntries]);
 
@@ -155,7 +183,7 @@ export function ItemDetail({
 
   const displayedRawOutput = useMemo(() => {
     if (!activeOutput) return "";
-    let text = item.tool_outputs[activeOutput] ?? "";
+    let text = activeRunText;
     if (statusFilter !== null) text = filterRawByStatus(text, statusFilter);
     const q = filterQuery.trim().toLowerCase();
     if (q) {
@@ -165,13 +193,13 @@ export function ItemDetail({
         .join("\n");
     }
     return text;
-  }, [activeOutput, item.tool_outputs, statusFilter, filterQuery]);
+  }, [activeOutput, activeRunText, statusFilter, filterQuery]);
   // Detects embedded JSON/HTML in the active tab's output (e.g. a curl/wget
   // response body) and offers a reformatted, syntax-highlighted view of it.
   const prettyResult = useMemo(() => {
     if (!activeOutput) return null;
-    return detectAndFormat(item.tool_outputs[activeOutput] ?? "");
-  }, [activeOutput, item.tool_outputs]);
+    return detectAndFormat(activeRunText);
+  }, [activeOutput, activeRunText]);
   // Falls back to raw whenever the active output has no parseable tree/JSON/
   // HTML for the currently selected view — switching tabs away from a
   // ffuf/gobuster/katana result (tree) or a curl/wget response (pretty) to
@@ -496,6 +524,32 @@ export function ItemDetail({
               </Tabs>
 
               <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap mb={1}>
+                {hasRunHistory && (
+                  <TextField
+                    select
+                    size="small"
+                    label="Run"
+                    value={effectiveRunSel === "all" ? "all" : String(effectiveRunSel)}
+                    onChange={(e) =>
+                      setRunSel(e.target.value === "all" ? "all" : Number(e.target.value))
+                    }
+                    sx={{ minWidth: 168, "& .MuiSelect-select": { fontSize: 12.5, py: 0.9 } }}
+                  >
+                    {runs
+                      .slice()
+                      .reverse()
+                      .map((r) => (
+                        <MenuItem key={r.index} value={String(r.index)} sx={{ fontSize: 12.5 }}>
+                          {r.label}
+                          {r.index === runs.length - 1 ? " (latest)" : ""}
+                          {r.timestamp ? ` · ${formatRunTimestamp(r.timestamp)}` : ""}
+                        </MenuItem>
+                      ))}
+                    <MenuItem value="all" sx={{ fontSize: 12.5 }}>
+                      All runs ({runs.length})
+                    </MenuItem>
+                  </TextField>
+                )}
                 <TextField
                   size="small"
                   placeholder="Filter output…"
@@ -535,6 +589,22 @@ export function ItemDetail({
                   </ToggleButtonGroup>
                 )}
               </Stack>
+
+              {hasRunHistory && effectiveRunSel !== "all" && runs[effectiveRunSel]?.command && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{
+                    display: "block",
+                    mb: 1,
+                    fontFamily: "var(--font-geist-mono)",
+                    fontSize: 11,
+                    wordBreak: "break-all",
+                  }}
+                >
+                  $ {runs[effectiveRunSel].command}
+                </Typography>
+              )}
 
               {renderOutputBody(12, effectiveOutputView === "pretty" ? 480 : 320)}
             </Box>

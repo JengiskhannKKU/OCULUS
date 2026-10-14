@@ -12,6 +12,8 @@ from oculus import state
 from oculus.models import Status
 from oculus.orchestrator import Orchestrator
 from oculus.tools.base import CANCELLED_EXIT_CODE
+from .auth import verify_token
+from .run_logs import exception_text, record
 
 router = APIRouter()
 
@@ -43,6 +45,10 @@ def cancel_run(eng_id: str, item_id: str) -> bool:
 
 @router.websocket("/ws/engagements/{eng_id}/items/{item_id}/run")
 async def run_tool_ws(websocket: WebSocket, eng_id: str, item_id: str) -> None:
+    token = websocket.query_params.get("token")
+    if not verify_token(token):
+        await websocket.close(code=1008, reason="Authentication required")
+        return
     await websocket.accept()
 
     try:
@@ -130,8 +136,16 @@ async def run_tool_ws(websocket: WebSocket, eng_id: str, item_id: str) -> None:
             )
             state.save(engagement)
             result_holder["result"] = result
+            if not result.success:
+                record(kind="tool_failure", engagement_id=eng_id, item_id=item_id,
+                       tool=tool_name, command=result.command, exit_code=result.exit_code,
+                       elapsed_seconds=result.elapsed_seconds, output=result.output,
+                       error=f"Tool exited with code {result.exit_code}")
         except Exception as exc:  # noqa: BLE001 — surfaced to the client, not swallowed
             result_holder["error"] = str(exc)
+            record(kind="tool_exception", engagement_id=eng_id, item_id=item_id,
+                   tool=tool_name, command=" ".join(custom_command or []),
+                   output="", error=str(exc), traceback=exception_text(exc))
         finally:
             _RUNNING.pop(run_key, None)
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})

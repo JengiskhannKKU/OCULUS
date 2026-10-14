@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
@@ -10,10 +11,12 @@ import IconButton from "@mui/material/IconButton";
 import Box from "@mui/material/Box";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ToolsCatalog } from "@/components/ToolsCatalog";
 
 export function NavBar() {
+  const router = useRouter();
   const [showSettings, setShowSettings] = useState(false);
   const [showTools, setShowTools] = useState(false);
 
@@ -60,6 +63,7 @@ export function NavBar() {
         >
           DASHBOARD
         </Button>
+        <Button component={Link} href="/logs" size="small" sx={{ fontSize: 12.5, letterSpacing: 1 }}>ERROR LOGS</Button>
         <IconButton
           size="small"
           onClick={() => setShowTools(true)}
@@ -67,6 +71,9 @@ export function NavBar() {
           sx={{ ml: 1, color: "text.secondary" }}
         >
           <BuildOutlinedIcon fontSize="small" />
+        </IconButton>
+        <IconButton size="small" title="Sign out" onClick={() => { localStorage.removeItem("oculus_access_token"); router.replace("/login"); }} sx={{ ml: 1, color: "text.secondary" }}>
+          <LogoutOutlinedIcon fontSize="small" />
         </IconButton>
         <IconButton
           size="small"

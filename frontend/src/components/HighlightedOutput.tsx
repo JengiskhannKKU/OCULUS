@@ -1,3 +1,5 @@
+import { stripAnsi } from "@/lib/logFilter";
+
 // Group indices (no named groups — avoids requiring an ES2018+ compile target):
 // 1 url · 2 bracket-status · 3 "Status: NNN" · 4 severity tag · 5 CVE ·
 // 6 [+] · 7 [-] · 8 warn glyph · 9 [!] · 10 OSVDB-id · 11 nmap "N/tcp open ..."
@@ -148,7 +150,11 @@ export function HighlightedLine({ line }: { line: string }) {
 }
 
 export function HighlightedOutput({ text }: { text: string }) {
-  const lines = text.split("\n");
+  // Runs stored before oculus/tools/base.py stripped ANSI at capture
+  // still carry raw colour/erase-line escapes; this view re-colours
+  // everything itself, so render them stripped rather than as literal
+  // "[2K[33m" noise.
+  const lines = stripAnsi(text).split("\n");
   return (
     <>
       {lines.map((l, i) => (

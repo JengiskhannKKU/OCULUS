@@ -16,6 +16,18 @@ from typing import Callable
 
 _IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
+# ANSI/VT100 control sequences (colour, cursor moves, erase-line) that a
+# tool emits when it thinks it's writing to a terminal. ffuf with -c is
+# the motivating case: its results print as
+# "\x1b[2K\x1b[33m[Status: 403 ...]\x1b[0m" and "\x1b[2K| URL | http://...",
+# and the leading escape means the line no longer starts with "[Status:"
+# or "|" — so every downstream regex (pathTree.ts's path parser, the
+# noise/progress filter, the raw-output highlighter, findings_extractor)
+# silently failed to match, and ffuf's discovered paths never reached the
+# Paths view at all. This app re-colours all tool output itself, so the
+# tool's own escapes are pure noise everywhere — strip them at capture.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
+
 
 def base_url(target: str) -> str:
     """Turn a bare target into a URL, respecting an explicit scheme.
@@ -199,6 +211,7 @@ def run_tool(
     def reader() -> None:
         assert proc.stdout is not None
         for line in proc.stdout:
+            line = _ANSI_RE.sub("", line)
             lines.append(line)
             if on_line:
                 on_line(line.rstrip())

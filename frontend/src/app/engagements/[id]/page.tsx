@@ -24,6 +24,7 @@ import { PortsDialog } from "@/components/PortsDialog";
 import { useToast } from "@/lib/toast";
 import { severityCounts } from "@/lib/severity";
 import { collectEngagementPaths } from "@/lib/engagementPaths";
+import { parseDiscoveredPaths } from "@/lib/pathTree";
 import { collectEngagementPorts } from "@/lib/engagementPorts";
 import type { ChecklistItem, Engagement, ToolInfo } from "@/lib/types";
 
@@ -67,16 +68,38 @@ export default function EngagementPage({
   }, [id, toast]);
 
   const updateItem = useCallback((updated: ChecklistItem) => {
-    setEngagement((prev) =>
-      prev
-        ? {
-            ...prev,
-            checklist_items: prev.checklist_items.map((it) =>
-              it.id === updated.id ? updated : it
-            ),
+    setEngagement((prev) => {
+      if (!prev) return prev;
+      // A path a tester hid via `removed_paths` should come back once a
+      // tool run rediscovers it — otherwise re-running the same (or a
+      // different) tool against the target can never surface that path
+      // again, even though its raw output plainly contains it. Re-running
+      // a tool is itself a deliberate act of looking again, so treat
+      // anything still (or newly) present in this item's tool output as
+      // no longer deserving to stay hidden.
+      let removedPaths = prev.removed_paths;
+      if (prev.removed_paths.length > 0) {
+        const rediscovered = new Set<string>();
+        for (const [tool, output] of Object.entries(updated.tool_outputs)) {
+          for (const { path } of parseDiscoveredPaths(output, tool)) {
+            if (prev.removed_paths.includes(path)) rediscovered.add(path);
           }
-        : prev
-    );
+        }
+        if (rediscovered.size > 0) {
+          removedPaths = prev.removed_paths.filter((p) => !rediscovered.has(p));
+          rediscovered.forEach((p) => {
+            api.restorePath(prev.id, p).catch(() => {});
+          });
+        }
+      }
+      return {
+        ...prev,
+        removed_paths: removedPaths,
+        checklist_items: prev.checklist_items.map((it) =>
+          it.id === updated.id ? updated : it
+        ),
+      };
+    });
   }, []);
 
   const addItem = useCallback((created: ChecklistItem) => {

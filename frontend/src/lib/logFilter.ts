@@ -9,8 +9,21 @@
 // run live" too.
 export const NOISE_LINE_RE = /^(::|_{3,}|v\d|\[SIMULATED|Duration:|Progress:)/;
 
+// ANSI/VT100 control sequences (colour, erase-line, cursor moves). New
+// tool runs get these stripped at capture (oculus/tools/base.py), but
+// runs stored before that fix still carry them — e.g. ffuf -c writes
+// "\x1b[2K\x1b[33m[Status: 403 ...]\x1b[0m", whose leading escape stops
+// the line matching /^\[Status:/ or /^\|/ and hides every ffuf-found
+// path from the Paths view. Strip defensively wherever a real tool line
+// is pattern-matched.
+export const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]/g;
+
+export function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
+
 export function isNoiseLine(line: string): boolean {
-  return NOISE_LINE_RE.test(line.trim());
+  return NOISE_LINE_RE.test(stripAnsi(line).trim());
 }
 
 export function filterNoiseLines(lines: string[]): string[] {
